@@ -64,9 +64,7 @@ class Variables:
                     to_pop.append(name)
             for name in to_pop:
                 values.pop(name)
-            print(self._to_record)
             self._to_record.update(values)
-            print(self._to_record)
             self.recorded_variables = [name for name in self.varnames if self._to_record[name] == True]
             self.is_recording = True if len(self.recorded_variables) else False
         # Here we assume the user gave a list of variables to record
@@ -118,7 +116,6 @@ class Model:
         for var in variables:
             vars_dict[var] = False
         self.variables.update_recorded_variables(vars_dict)
-
     
     def __repr__(self):
         # TODO: finish implementation

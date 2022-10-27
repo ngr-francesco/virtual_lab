@@ -70,11 +70,13 @@ class Simulation:
         self.model.update_variables_init_values()
         # Now we can set the constants back to their values needed for the experiment
         exp.T = temp_T
+        # We exclude the stochastic variables because in our constants we might have an initialization value
+        # in case the model can also be used as a mean field approximation.
         self.model.prepare_constants(exp,exclude_stochastic = True)
         self.model.is_recording = was_recording
 
     def run_experiments(self, experiments, n_of_runs=1, 
-                        stochastic_model = False, stochastic_proc = None,
+                        stochastic_model = False,
                         termalize = False, termalization_time = 2*3600, 
                         record_termalization = False, save_results = True):
         # Format the experiments correctly
@@ -177,8 +179,32 @@ class Simulation:
             else:
                 new_values[name] = data[slice(start,stop,step)]
         return new_values
+    
+    def model_equations(self,models = None, figure = None, rows = 1,**kwargs):
+        if models == None:
+            models = [self.model]
+        elif isinstance(models,list) and isinstance(models[0],str):
+            models = [self.models[k] for k in models]
+        elif isinstance(models,str):
+            models = [self.models[models]]
+        # Only look at the width, the height will be fixed
+        figsize = (kwargs.get('figsize',(8,6)))
+        if figure == None:
+            figure = plt.figure(figsize=figsize)
+        for i,model in enumerate(models):
+            ax = figure.add_subplot(rows,len(models),i+1)
+            equations = model.latex_equations()
+            equations.insert(0,f"Equations for model: {model.name}")
+            cols = len(equations)
+            pos = np.arange(0.8,0.1,-0.7/cols)
+            for eq,y in zip(equations,pos):
+                ax.text(0.5,y,eq,ha = "center",va="center",fontsize = 16)
+            ax.set_axis_off()
 
-    def plot_volumes(self, results = None, exp_names = None, time_interval = None, name = "img.pdf", time_in_min = True, step = 1, **kwargs):
+
+    def plot_volumes(self, results = None, exp_names = None, 
+                    time_interval = None, filename = "img.pdf", 
+                    time_in_min = True, step = 1, show_equations = True, **kwargs):
         """
             Plot the volumes computed in the experiments.
         Parameters:
@@ -241,6 +267,13 @@ class Simulation:
         
         quantities_for_legend = 0
         plot_idx = 0
+        rows = ceil(len(results)/plot_cols)
+        cols = (plot_cols if len(results) >= plot_cols else len(results))
+        rows = rows+1 if show_equations else rows
+        start_index = 1 + cols if show_equations else 1
+        if show_equations:
+            models = list(set([result["model"] for result in results]))
+            self.model_equations(models,fig,rows)
         for result in results:
             if result["name"] in exp_names:
                 idx = exp_names.index(result["name"])
@@ -256,9 +289,8 @@ class Simulation:
                 else:
                     plot_std = False
                     #print(len(Vd_t),len(Vs_t))
-                rows = ceil(len(results)/plot_cols)
-                cols = plot_cols if len(results) >= plot_cols else len(results)
-                plt.subplot(rows,cols,plot_idx+1)
+
+                ax = fig.add_subplot(rows,cols,plot_idx+start_index)
 
                 if use_title:
                     plt.title(result["model"] + ": " + result["name"])
@@ -276,6 +308,20 @@ class Simulation:
                                                     values["mean_" + name]+ values["std_" + name],alpha = 0.3)
                         else:
                             plt.plot(time_axis,values[name],label = name,lw = lw)
+                if result["experiment"].experimental_data is not None:
+                    colors = ['k','b','g'] # Assuming you don't want to plot more than 3 experiments on top of your results
+                    data_dict = result["experiment"].experimental_data
+                    try:
+                        renorm_value = values["mean_" + data_dict["renorm_var"]][0] if plot_std else values[data_dict["renorm_var"]][0]
+                    except KeyError:
+                        renorm_value = 1
+                    # TODO: This is a bit terrible
+                    plot_dict = data_dict.copy()
+                    plot_dict.pop("renorm_var")
+                    for i,data in enumerate(plot_dict):
+                        # TODO: This is also highly incorrect and should happen in other places
+                        y_data = np.array(data_dict[data]["y"])*renorm_value
+                        plt.plot(data_dict[data]["x"],y_data,label = data,lw = 2,marker = 'x',markersize = 10,ls='--',color = colors[i])
                         
                 #plt.plot(np.arange(0,T+dt,dt)/3600, (Vs_t+Vd_t-PSD_95)/2 +shift, label=r'Tag', ls='-.', alpha =0.2)
                 #plt.plot([0,T/3600],[shift,shift] ,color='0', ls=":")
@@ -318,7 +364,7 @@ class Simulation:
                     use_this_exp = True if (counter > quantities_for_legend) else False
                     quantities_for_legend = counter if use_this_exp else quantities_for_legend
                     if use_this_exp:
-                        legend_idx = plot_idx
+                        legend_axes = ax
                 plot_idx += 1
 
         # Esthetic styling
@@ -328,10 +374,10 @@ class Simulation:
         plt.gca().spines['right'].set_visible(False)
         # Save figure in the plots directory
         if use_legend:
-            handles,labels = fig.get_axes()[legend_idx].get_legend_handles_labels()
+            handles,labels = legend_axes.get_legend_handles_labels()
             plt.legend(handles,labels, bbox_to_anchor = (1,0), loc= 'lower left', ncol=kwargs.get('legend_cols', ceil(len(model_variables)/4)), fontsize=fontsize)
         makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
-        fig.savefig(self.prefs.plot_directory + name)
+        fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
     
     def plot_comparison(self, results = None, models = None, exp_names = None, **kwargs):
@@ -389,7 +435,7 @@ class Simulation:
 
     def plot_selected_points(self,results,variables,selection_idx, 
                         event_type = "stim", event_idx = 60, x_data = None,
-                        reference_values = None, save = True, name = "img.pdf", **kwargs):
+                        reference_values = None, save = True, filename = "img.pdf", **kwargs):
         # TODO: add possibility to plot from multiple results (i.e. a list or dictionary of results like above)
         if not isinstance(results,list):
             if isinstance(results,dict):
@@ -442,7 +488,7 @@ class Simulation:
                 time_axis.append(len(time_axis))
                 for varname in variables:
                     points[varname].append(result[varname][selection_idx])
-                titles.append(result["name"])
+                titles.append(f"{result['model']}:{result['name']}")
         if x_data is not None: # Override the time axis, but only if they're compatible
             if len(x_data) != len(time_axis):
                 warn("The x_data you gave is not compatible with the number of points in the plot, "
@@ -455,6 +501,20 @@ class Simulation:
         
         n_plots = 1 if not isinstance(points[variables[0]][0],list) else len(results)
         print(f"Making {n_plots} plots")
+        if reference_values is not None:
+            # Making sure the formatting is done correctly
+            if isinstance(reference_values,list):
+                if len(reference_values) % n_plots == 0 and n_plots > 1:
+                    if not isinstance(reference_values[0],list):
+                        reference_values = [[reference_values[i]]for i in range(len(reference_values))]
+                else:
+                    if isinstance(reference_values[0],list) or isinstance(reference_values[0],np.ndarray):
+                        raise ValueError("The reference values you gave are incompatible with the number of plots, make sure you either give"
+                        " a list of values (or single value) for each plot, or a list of values that should be shared among plots.")
+                    else:
+                        reference_values = [reference_values for k in range(n_plots)]
+            else:
+                reference_values = [[reference_values] for k in range(n_plots)]
         # Convert time to minutes 
         if kwargs.get("time_in_m",True):
             if n_plots> 1:
@@ -473,17 +533,15 @@ class Simulation:
             for varname in variables:
                 plt.plot(time_axis[idx] if n_plots > 1 else time_axis,points[varname][idx] if n_plots >1 else points[varname],label = varname)
             if reference_values is not None:
-                if not isinstance(reference_values,list):
-                    reference_values = [reference_values]
-                for val in reference_values:
+                for val in reference_values[idx]:
                     plt.plot([time_axis[0],time_axis[-1]],[val,val],label = kwargs.get('ref_label',"reference"))
             plt.xlabel("Time in m")
             plt.ylabel(kwargs.get('ylabel','% of baseline'))
             plt.legend(fontsize = fontsize)
             plt.title(titles[idx]) 
         if save:
-            makedirs("plots",exist_ok=True)
-            plt.savefig("plots/" + name)
+            makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
+            plt.savefig(self.prefs.plot_directory + filename)
         plt.show()
     
     def sort_events_in_t(self,exp,event_type,start_end):

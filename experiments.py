@@ -2,10 +2,11 @@ from warnings import warn
 from virtual_lab.const import * 
 
 class Experiment:
-    def __init__(self,name, exp_const, custom_const = DEFAULT_NUCLEATION, **kwargs):
+    def __init__(self,name, exp_const, exp_data = None, custom_const = DEFAULT_NUCLEATION, **kwargs):
         self.name = name
         self.title = kwargs.get('title',name)
         self.quantities = {}
+        self.experimental_data = exp_data
         for key,value in exp_const.items():
             setattr(self,key,[[onset,onset+duration] for onset,duration in value])
             self.quantities[key] = getattr(self,key)
@@ -110,6 +111,22 @@ class Experiments:
                     print(type(intervals[0]))
                     raise NotImplementedError("If an event is concurring with another and you wish to add it, use the format [onset,duration] (no nested lists!)")
 
+import json
+with open("experimental_data.json","r") as file:
+    exp_data = json.load(file)
+
+data_LTP = {}
+names = [name for name in exp_data if "sLTP" in name]
+names.append("renorm_var")
+for name in names:
+    data_LTP[name] = exp_data[name]
+data_LTD = {}
+names = [name for name in exp_data if "sLTD" in name]
+names.append("renorm_var")
+for name in names:
+    data_LTD[name] = exp_data[name]
+
+
 BasicExperiments = Experiments()
 NO_STIMULI = Experiment("NO_STIMULI",
                 {"protein" : [], 
@@ -127,7 +144,8 @@ S_TET = Experiment("S_TET",
                     {"stim": [[300,STET]], 
                     "LFS": [], 
                     "xlinkers": [[300,X_STET]], 
-                    "protein" : [[300+P_ONSET,PROTEIN]] })
+                    "protein" : [[300+P_ONSET,PROTEIN]] },
+                    exp_data = data_LTP)
 
 BasicExperiments.add(S_TET)
 LTP_X2 = Experiment("LTP_X2",
@@ -176,9 +194,18 @@ LTD = Experiment("LTD",
                  {"stim": [],
                         "LFS": [[300, LFS]],
                         "xlinkers": [[300, X_LFS]],
-                        "protein" : [[300+P_ONSET, PROTEIN]] })  
+                        "protein" : [[300+P_ONSET, PROTEIN]] },
+                        exp_data = data_LTD)  
 
 BasicExperiments.add(LTD)
+W_LFS = Experiment("W_LFS",
+                 {"stim": [],
+                        "LFS": [[300, LFS]],
+                        "xlinkers": [[300, X_LFS]],
+                        "protein" : [] },
+                         T = 10*3600,dt = 5)  
+
+BasicExperiments.add(W_LFS)
 STC_LTD_WBS = Experiment("STC_LTD_WBS",
                          {"stim": [],
                         "LFS": [[300, LFS]],
@@ -204,9 +231,9 @@ BasicExperiments.set_custom_constants(DEFAULT_NUCLEATION)
 # Experiments for Metaplasticity
 MetaPlasticityExperiments = Experiments()
 # Time required to complete one plasticity event
-pt = 2*3600
+pt = 3*3600
 n_LTP = 300
-n_LTD = 40
+n_LTD = 60
 n_LTP_mixed = 100
 n_LTD_mixed = 100
 LTP_META = Experiment("LTP_META",
@@ -226,7 +253,7 @@ MetaPlasticityExperiments.add(LTD_META)
 
 xlinkers_mixed_metaplaticity = [[k*pt+10,X_STET] for k in range(n_LTP_mixed)]
 for k in range(n_LTD_mixed):
-    xlinkers_mixed_metaplaticity.append([k*pt+10,X_LFS])
+    xlinkers_mixed_metaplaticity.append([k*pt+pt*n_LTP_mixed+10,X_LFS])
 MIX_META = Experiment("MIX_META",
                      {"stim" : [[k*pt+10,STET] for k in range(n_LTP_mixed)],
                      "LFS" : [[k*pt+pt*n_LTP_mixed+10,LFS] for k in range(n_LTD_mixed)],
@@ -241,7 +268,7 @@ TagResetExperiments = Experiments([Experiment(f"STC_TR{int(t/60)}",
            {"stim": [[300,STET]],
            "LFS": [[300+t,LFS]],
            "xlinkers": [[300,X_STET],[300+t,X_LFS]],
-           "protein": [[300+P_ONSET,PROTEIN]]},T = 2*3600 + t,dt = 5) for t in np.arange(120,2700,120)])
+           "protein": [[300+P_ONSET,PROTEIN]]},T = 3*3600 + t,dt = 5) for t in np.arange(120,2700,120)])
 
 
 

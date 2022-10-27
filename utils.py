@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-__all__ = ['bd_process']
+__all__ = ['bd_process','preprocess_experimental_data']
 
 def bd_step(n,gamma,mu, dt = 1):
     if n == 0:
@@ -39,10 +39,31 @@ def bd_process(*args, dt = 1, seed = None, **kwargs):
         mu = kwargs.get('mu',ValueError)
         if gamma is ValueError or mu is ValueError:
             raise ValueError(msg)
+    # Set the seed
     if not seed is None:
         np.random.seed(seed)
     assert gamma.shape == mu.shape
+    # run the birth death process
     n = np.zeros(gamma.shape)
     for k in range(1,len(n)):
         n[k] = bd_step(n[k-1],gamma[k],mu[k],dt)
     return n 
+
+def preprocess_experimental_data(data,datasheet_name = "experimental_data.json"):
+    """
+    This function is mainly to manage my specific data, so it's useless for data formatted in any other way.
+    """
+    import json
+    new_datasheet = {}
+    for d in data:
+        if d == "info" or d == "renorm_var":
+            new_datasheet[d] = data[d]
+            continue
+        # Here I add 5 minutes because that's by default when stimuli happen for us
+        # TODO: it's terrible, you should just start the simulation at -5 mins and then stimulate at 0
+        x_data = (np.cumsum(data[d]["deltax"])+5).tolist()
+        y_data = data[d]["y"].tolist()
+        new_datasheet[d] = {"x": x_data,"y": y_data}
+    with open(datasheet_name,"w+") as file:
+        json.dump(new_datasheet,file)
+    

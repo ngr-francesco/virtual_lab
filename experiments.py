@@ -190,6 +190,20 @@ STC_TR15 = Experiment("STC_TR15",
                         "protein" : [[300+P_ONSET, PROTEIN]] })  
 
 BasicExperiments.add(STC_TR15)
+STC_DR5 = Experiment("STC_DR5",
+                     {"stim": [[600, STET]],
+                      "LFS": [[300,LFS]],
+                      "xlinkers": [[300,X_LFS],[600,X_STET]],
+                      "protein": [[300+P_ONSET,PROTEIN]]})
+
+BasicExperiments.add(STC_DR5)
+STC_DR15 = Experiment("STC_DR15",
+                     {"stim": [[1200, STET]],
+                      "LFS": [[300,LFS]],
+                      "xlinkers": [[300,X_LFS],[1200,X_STET]],
+                      "protein": [[300+P_ONSET,PROTEIN]]})
+
+BasicExperiments.add(STC_DR15)
 LTD = Experiment("LTD",
                  {"stim": [],
                         "LFS": [[300, LFS]],
@@ -203,7 +217,7 @@ W_LFS = Experiment("W_LFS",
                         "LFS": [[300, LFS]],
                         "xlinkers": [[300, X_LFS]],
                         "protein" : [] },
-                         T = 10*3600,dt = 5)  
+                         T = 15*3600,dt = 5)  
 
 BasicExperiments.add(W_LFS)
 STC_LTD_WBS = Experiment("STC_LTD_WBS",

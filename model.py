@@ -149,16 +149,23 @@ class Model:
         self.variables = Variables(self.variables.init_values, record=self.variables.is_recording)
     
     def update_variables_init_values(self):
+        # Used for when we termalize the system and want to keep these as baseline values
         new_init_values = {}
         for var in self.variables.varnames:
             new_init_values[var] = getattr(self.variables,var)
         self.variables.init_values = new_init_values
     
-    def initialise_variables(self, stochastic):
-        # For the variables which are not initialised,
-        # run this function to initialise them using the constants.
-        # Also account for a model which could work both with stochastic or deterministic variables
+    def set_initial_values(self,stochastic):
         raise NotImplementedError
+    
+    def initialise_variables(self,exp,stochastic):
+        if stochastic:
+            self.prepare_constants(exp,termalizing = True)
+            if stochastic:
+                self.run_stochastic_processes()
+            # We initialise the model here by using the values obtained from the "basal" stochastic process
+        self.set_initial_values(stochastic)
+        self.update_variables_init_values()
     
     def prepare_constants(self, exp: Experiment, termalizing = False, exclude_stochastic = False):
         self.set_exp_constants(exp)

@@ -43,7 +43,7 @@ class Simulation:
         elif isinstance(model,str):
             self.model = self.models[model]
     
-    def termalize_system(self,termalization_time,exp,stochastic_model = False,record = False):
+    def termalize_system(self,termalization_time,exp,stochastic = False,record = False):
         """
         I'm not sure this function is needed anymore. Could just put it into the run_experiments() method. I'll consider it.
         Notes:
@@ -57,14 +57,18 @@ class Simulation:
         # This assures us that when we run the stochastic processes we'll be using the base values without perturbations
         temp_T = exp.T
         exp.T = termalization_time
+        # Prepare the constants to have a sufficient size for running termalization
         self.model.prepare_constants(exp,termalizing = True)
-        if stochastic_model:
+        if stochastic:
             self.model.run_stochastic_processes()
-        # We initialise the model here by using the values obtained from the "basal" stochastic process
-        self.model.initialise_variables(stochastic_model)
-        print("stochastic process run..")
+            print("stochastic process run..")
+        if self.model.termalization_step is not None:
+            term_func = self.model.termalization_step
+        else:
+            term_func = self.model.single_step
         for t in range(termalization_time):
-            self.model.single_step(t)
+            term_func(t)
+        print("termalization process run..")
         # Since we only want to termalize once in most cases, copy the current variable values into their init values
         # so that at the next iteration we can start from there.
         self.model.update_variables_init_values()
@@ -72,11 +76,11 @@ class Simulation:
         exp.T = temp_T
         # We exclude the stochastic variables because in our constants we might have an initialization value
         # in case the model can also be used as a mean field approximation.
-        self.model.prepare_constants(exp,exclude_stochastic = True)
+        self.model.prepare_constants(exp,exclude_stochastic = stochastic)
         self.model.is_recording = was_recording
 
     def run_experiments(self, experiments, n_of_runs=1, 
-                        stochastic_model = False,
+                        stochastic = False,
                         termalize = False, termalization_time = 2*3600, 
                         record_termalization = False, save_results = True):
         # Format the experiments correctly
@@ -92,7 +96,7 @@ class Simulation:
             raise TypeError(error_msg + str(type(experiments)))
         if isinstance(experiments,Experiment):
             experiments = Experiments(experiments)
-        if termalize and not stochastic_model:
+        if termalize and not stochastic:
             warn("You chose to termalize your model with a non-stochastic model, "
             "often in deterministic models you could compute your stationary state analytically and save computation time.")
         # Results dictionary
@@ -101,6 +105,8 @@ class Simulation:
             "experiment": None}
         variables_to_record = [name for name in self.model.variables.recorded_variables]
         res_dict.update({var : None for var in variables_to_record})
+        if self.model.stochastic_variables is not None:
+            res_dict.update({var: None for var in self.model.stochastic_variables})
         # Our results are made of a list of dictionaries, one for each experiment.
         results = [res_dict.copy() for k in range(len(experiments))]
         constants_changed = False
@@ -121,38 +127,47 @@ class Simulation:
             experiment_constants = custom_const
             if termalize and constants_changed:
                 termalized = False
-            self.model.prepare_constants(exp)
+            self.model.prepare_constants(exp,exclude_stochastic = stochastic)
+            # In case we're running a termalization process we only want to run this once
+            # because then re-initialization is automatically taken care of inside of model.reset()
+            if not stochastic or not termalized:
+                self.model.initialise_variables(exp,stochastic)
             for k in range(n_of_runs):
+                
                 # INITIALIZE ALL OF THE QUANTITIES FOR THE SIMULATION
                 # If we want to allow the system to termalize on its own
-                if stochastic_model:
+                if stochastic:
                     self.model.run_stochastic_processes()
                 if termalize:
                     # If the system doesn't change between experiments we only run this once!
                     if not termalized:
                         print("Termalizing...")
-                        self.termalize_system(termalization_time,exp,stochastic_model, record_termalization)
+                        self.termalize_system(termalization_time,exp,stochastic, record_termalization)
                         termalized = True
                         print("Termalized")
-                else:
-                    # TODO: Currently this is not compatible with models in which you have to compute the mean
-                    # of a stochastic variable in its basal state (e.g. basal avg nucleation rate). But, there would still be other ways to give such
-                    # parameter to your moel by running the basal process, computing the mean and then setting it manually as a param.
-                    self.model.initialise_variables(stochastic_model)  
-
                 # Simulation Loop
                 # TODO check if this is considerably faster if done within the model
                 for t in range(exp.steps):
                     self.model.single_step(t)
                 # Save the data
+                
                 try:
                     for var in variables_to_record:
                         data = self.model.variables.recorded_values[var]
                         results[i][var] = np.row_stack([results[i][var],np.array(data)])
+                    # Stochastic variables are kind of a special case so we treat them separately
+                    if self.model.stochastic_variables is not None:
+                        for var in self.model.stochastic_variables:
+                            data = getattr(self.model,var)
+                            results[i][var] = np.row_stack([results[i][var],np.array(data)])
                 except ValueError:
                     for var in variables_to_record:
                         data = self.model.variables.recorded_values[var]
                         results[i][var] = np.array(data)
+                    if self.model.stochastic_variables is not None:
+                        for var in self.model.stochastic_variables:
+                            data = getattr(self.model,var)
+                            results[i][var] = np.array(data)
                 # Reset the model variables to their initial state
                 self.model.reset()
             if n_of_runs > 1:

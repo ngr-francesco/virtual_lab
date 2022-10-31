@@ -1,8 +1,8 @@
 # Durations
-STET = 60
+STET = 120
 WTET = 60
 PROTEIN = 3600
-X_STET = 60
+X_STET = 120
 X_WTET = 60
 X_ENLARGE = 300 # 300
 X_SHRINK = 1800
@@ -44,15 +44,15 @@ CONSTANTS = {
     # Nucleation birth-death process dynamics
     "g_mul_LTD" : 1/10, 
     "m_mul_LTD" : 10,
-    "g_mul_LTP" : 80, 
+    "g_mul_LTP" : 30, 
     "m_mul_LTP" : 1/15,
-    "gamma_0" : 0.01, # For now just making sure nothing explodes
+    "gamma_0" : 0.02, # For now just making sure nothing explodes
     "mu_0" : 0.25
 }
 
 DEFAULT_NUCLEATION = {
-    "nf_0" : 0.03,
-    "nf_LTP": 25,
+    "nf_0" : 0.04,
+    "nf_LTP": 15,
     "nf_LTD": 0,
     "nf_bd_process": False,
     "default" : True

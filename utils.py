@@ -66,4 +66,17 @@ def preprocess_experimental_data(data,datasheet_name = "experimental_data.json")
         new_datasheet[d] = {"x": x_data,"y": y_data}
     with open(datasheet_name,"w+") as file:
         json.dump(new_datasheet,file)
+
+def select_unique_handles_and_labels(handles,labels):
+    """
+    Just a helper function to make sure that the legend has all the necessary labels.
+    Since handles and labels are connected I can't just use set(labels), so I use the labels as an indicator
+    that tells me which handles to actually use.
+    """
+    h,l = [],[]
+    for handle,label in zip(handles,labels):
+        if not label in l:
+            h.append(handle)
+            l.append(label)
+    return h,l
     

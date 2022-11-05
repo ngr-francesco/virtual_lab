@@ -20,6 +20,11 @@ class Variables:
         # For now we either record all or none
         if self.is_recording:
             self.recorded_values = {name : [] for name in self.varnames}
+    
+    to_record = property(lambda self: self._to_record)
+    
+    def __iter__(self):
+        return iter([var for var in self.varnames])
 
     @property
     def is_recording(self):
@@ -51,11 +56,11 @@ class Variables:
     def update_recorded_variables(self,values):
         if isinstance(values,str):
             if values == 'all':
-                self.is_recording = True
                 self.recorded_variables = [var for var in self.varnames]
-            elif values == 'none' or values == 'None':
                 self.is_recording = True
+            elif values == 'none' or values == 'None':
                 self.recorded_variables = []
+                self.is_recording = True
         elif isinstance(values,dict):
             to_pop = []
             for name in values:
@@ -75,7 +80,7 @@ class Variables:
                     if not name in self.recorded_variables:
                         self.recorded_variables.append(name)
                 else:
-                    warn(f"An incorrect variable name was give, this variable will be ignored: {name}") 
+                    warn(f"An incorrect variable name was given, this variable will be ignored: {name}") 
 
 
 
@@ -116,7 +121,7 @@ class Model:
         for var in variables:
             vars_dict[var] = False
         self.variables.update_recorded_variables(vars_dict)
-    
+
     def __repr__(self):
         # TODO: finish implementation
         _str = f"{self.name} model:\n"
@@ -146,7 +151,9 @@ class Model:
 
     def reset(self):
         # Reset the variable values to their initial values
+        being_recorded = self.variables.to_record
         self.variables = Variables(self.variables.init_values, record=self.variables.is_recording)
+        self.record_variables(being_recorded)
     
     def update_variables_init_values(self):
         # Used for when we termalize the system and want to keep these as baseline values
@@ -160,12 +167,15 @@ class Model:
     
     def initialise_variables(self,exp,stochastic):
         if stochastic:
-            self.prepare_constants(exp,termalizing = True)
+            self.prepare_constants(exp,termalizing = True,exclude_stochastic=stochastic)
             if stochastic:
                 self.run_stochastic_processes()
             # We initialise the model here by using the values obtained from the "basal" stochastic process
         self.set_initial_values(stochastic)
         self.update_variables_init_values()
+        if stochastic:
+            self.prepare_constants(exp,exclude_stochastic=stochastic)
+        
     
     def prepare_constants(self, exp: Experiment, termalizing = False, exclude_stochastic = False):
         self.set_exp_constants(exp)
@@ -176,13 +186,14 @@ class Model:
                 # If we don't want to prepare the stochastic variables skip these
                 # This is useful in the case of a model which can be both stochastic or deterministic
                 # To avoid the need of giving different names to the stochastic and non-stochastic versions of the same variable
-                if name in self.stochastic_variables and exclude_stochastic:
+                if name in self.stochastic_variables.keys() and exclude_stochastic:
                     continue
                 _const = getattr(self,name)
                 for s in c_values.keys():
                     for ton,toff in getattr(exp,s):
                         _const[int(ton/exp.dt):int(toff/exp.dt)] = c_values[s]
                     setattr(self,name,_const)
+        
                     
     def initialise_constants(self,const_dict,exp):
         for name in const_dict:
@@ -197,7 +208,10 @@ class Model:
     def set_exp_constants(self,exp):
         if exp.has_custom_constants:
             for key,value in exp.get_custom_constants().items():
-                setattr(self,key,value)
+                # Make sure you don't override already defined 
+                # FIXME: This is inherently bad, you have to definitely solve the naming problem you had today!
+                if not hasattr(self,key):
+                    setattr(self,key,value)
     
     def run_stochastic_processes(self):
         for varname, (func,args) in self.stochastic_variables.items():

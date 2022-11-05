@@ -6,7 +6,7 @@ X_STET = 120
 X_WTET = 60
 X_ENLARGE = 300 # 300
 X_SHRINK = 1800
-X_LFS = 500
+X_LFS = 900
 LFS = 900
 P_ONSET = 2700 # Bosch 2014 -> The PSD doesn't change in the first 45 mins
 E_ONSET = 420 # 600 # This should be between 2-7 mins
@@ -54,8 +54,6 @@ DEFAULT_NUCLEATION = {
     "nf_0" : 0.04,
     "nf_LTP": 15,
     "nf_LTD": 0,
-    "nf_bd_process": False,
-    "default" : True
 }
 
 
@@ -81,7 +79,7 @@ EXPERIMENTAL_DATA = {
     # Kasai Noguchi: 20m = 11 mm, 25% = 8.1 mm
     "sLTD_Kasai_Noguchi": { "deltax": 20/11*np.array([0,5.7,5.5,5.4,5.7,6.0,5.3,11.6]),
                             "y": 1- .25/8.1*np.array([0,4.4,6.3,8.7,8.6,7.9,8.8,8.6])},
-    "renorm_var" : "V_n"
+    "renorm_var" : "V_tot"
 }
 
 from virtual_lab.utils import preprocess_experimental_data

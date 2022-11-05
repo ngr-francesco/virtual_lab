@@ -1,4 +1,3 @@
-from multiprocessing.sharedctypes import Value
 import matplotlib
 import numpy as np
 import matplotlib.pyplot as plt
@@ -136,24 +135,15 @@ class Simulation:
             res_dict.update({var: None for var in self.model.stochastic_variables})
         # Our results are made of a list of dictionaries, one for each experiment.
         results = [res_dict.copy() for k in range(len(experiments))]
-        constants_changed = False
-        experiment_constants = None
-        custom_const = None
         start_time = perf_counter()
+        termalized = False
         for i, exp in enumerate(experiments):
             # Make it simple to change nucleation rates for single experiments
             results[i]["name"] = exp.title
             results[i]["experiment"] = exp
             results[i]["model"] = self.model.name
             self.model.dt = exp.dt # TODO: Better management of the dt
-            # I change the nf values but keep track if they are different 
-            # because if they aren't we don't need to redo termalization
-            if exp.has_custom_constants: 
-                custom_const = exp.get_custom_constants()
-            constants_changed = experiment_constants != custom_const
-            experiment_constants = custom_const
-            if termalize and constants_changed:
-                termalized = False
+
             self.model.prepare_constants(exp,exclude_stochastic = stochastic)
             
             # In case we're running a termalization process we only want to run this once

@@ -178,7 +178,6 @@ class Model:
         
     
     def prepare_constants(self, exp: Experiment, termalizing = False, exclude_stochastic = False):
-        self.set_exp_constants(exp)
         const_dict = self.quantity_dependencies()
         self.initialise_constants(const_dict,exp)
         if not termalizing:
@@ -204,14 +203,6 @@ class Model:
                 setattr(self,name,np.ones(exp.steps)*getattr(self,name+'_0'))
             else:
                 setattr(self,name,np.zeros(exp.steps))
-    
-    def set_exp_constants(self,exp):
-        if exp.has_custom_constants:
-            for key,value in exp.get_custom_constants().items():
-                # Make sure you don't override already defined 
-                # FIXME: This is inherently bad, you have to definitely solve the naming problem you had today!
-                if not hasattr(self,key):
-                    setattr(self,key,value)
     
     def run_stochastic_processes(self):
         for varname, (func,args) in self.stochastic_variables.items():

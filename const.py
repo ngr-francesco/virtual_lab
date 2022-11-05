@@ -47,14 +47,12 @@ CONSTANTS = {
     "g_mul_LTP" : 30, 
     "m_mul_LTP" : 1/15,
     "gamma_0" : 0.02, # For now just making sure nothing explodes
-    "mu_0" : 0.25
-}
-
-DEFAULT_NUCLEATION = {
+    "mu_0" : 0.25,
     "nf_0" : 0.04,
     "nf_LTP": 15,
-    "nf_LTD": 0,
+    "nf_LTD": 0
 }
+
 
 
 import numpy as np

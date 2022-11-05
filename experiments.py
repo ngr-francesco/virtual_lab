@@ -2,7 +2,7 @@ from warnings import warn
 from virtual_lab.const import * 
 
 class Experiment:
-    def __init__(self,name, exp_const, exp_data = None, custom_const = DEFAULT_NUCLEATION, **kwargs):
+    def __init__(self,name, exp_const, exp_data = None, **kwargs):
         self.name = name
         self.title = kwargs.get('title',name)
         self.quantities = {}
@@ -12,28 +12,14 @@ class Experiment:
             self.quantities[key] = getattr(self,key)
         self.dt = kwargs.get("dt",CONSTANTS['dt'])
         self.T = kwargs.get("T",CONSTANTS['T'])
-        self.has_custom_constants = False
-        if custom_const is not None:
-            self._custom_constants = custom_const
-            self.set_custom_constants(custom_const)
     
     steps = property(lambda self: int(self.T/self.dt))
-    
-    def get_custom_constants(self):
-        return self._custom_constants
     
     def __call__(self):
         return self.quantities
     
     def __str__(self):
         return self.name
-
-    def set_custom_constants(self,const):
-        for key,value in const.items():
-            setattr(self,key,value)
-        self._custom_constants = const
-        # This allows us to run stochastic simulations faster
-        self.has_custom_constants = True
     
     def copy(self):
         exp_const = {}
@@ -44,7 +30,7 @@ class Experiment:
                 new_q.append([ton,duration])
             exp_const[name] = new_q
 
-        return Experiment(self.name,exp_const,nucleation_const=self.get_custom_constants(),T = self.T,dt = self.dt)
+        return Experiment(self.name,exp_const,T = self.T,dt = self.dt)
     
     def add_event(self,name,intervals):
         setattr(self,name,[[onset,onset+duration] for onset,duration in intervals])
@@ -59,10 +45,6 @@ class Experiments:
         self.experiments = []
         if experiments is not None:
             self.add(experiments)
-    
-    def set_custom_constants(self,const):
-        for experiment in self.experiments:
-            experiment.set_custom_constants(const)
 
     def add(self, experiments):
         try:
@@ -241,7 +223,6 @@ XLINKERS = Experiment("XLINKERS",
                         "protein" : [] })  
 
 BasicExperiments.add(XLINKERS)
-BasicExperiments.set_custom_constants(DEFAULT_NUCLEATION)
 # Experiments for Metaplasticity
 MetaPlasticityExperiments = Experiments()
 # Time required to complete one plasticity event
@@ -275,7 +256,6 @@ MIX_META = Experiment("MIX_META",
                      "protein": [[k*pt+P_ONSET,PROTEIN] for k in range(n_LTD_mixed+n_LTP_mixed) ]
                      }, T = pt*(n_LTD_mixed+n_LTP_mixed), dt = 10)
 MetaPlasticityExperiments.add(MIX_META)
-MetaPlasticityExperiments.set_custom_constants(DEFAULT_NUCLEATION)
 # Experiments for Tag resetting
 import numpy as np
 TagResetExperiments = Experiments([Experiment(f"STC_TR{int(t/60)}",

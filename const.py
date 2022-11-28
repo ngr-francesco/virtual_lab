@@ -4,8 +4,6 @@ WTET = 60
 PROTEIN = 3600
 X_STET = 120
 X_WTET = 60
-X_ENLARGE = 300 # 300
-X_SHRINK = 1800
 X_LFS = 900
 LFS = 900
 P_ONSET = 2700 # Bosch 2014 -> The PSD doesn't change in the first 45 mins
@@ -15,8 +13,8 @@ CONSTANTS = {
     "dt" : 1,
     "T" : 2*3600,
     # Crosslinker binding rates
-    "k_u_0" : 1/2/3600, # Basal transition rates between stable and dynamic pool
-    "k_b_0" : 1/2/600, # CaMKII active (unbound) for about 1 min after LTP (Lee et al 2009)
+    "k_u_0" : 1/3/3600, # Basal transition rates between stable and dynamic pool
+    "k_b_0" : 1/3/600, # CaMKII active (unbound) for about 1 min after LTP (Lee et al 2009)
     "k_u_1" : 1/60, # k_u_1 = 1/90
     "k_b_1" : 1/600, # k_b_1 = 1/30
     # Initial PSD volume
@@ -24,7 +22,6 @@ CONSTANTS = {
     # Actin foci
     "AFB" : 0,       # Should nf be multiplied by Vd?
     "nu"  : 0.002,   # Factor at which volume grows with # foci
-    "nf_0": 0.03,
     # Dynamic actin removal
     "removal" : 2,    # Removal 0: Vd dependent, 1: Vd/PSD dependent; 2: V/PSD dependent
     "DVD"     : 1,     # Should loss in Vd be multiplied by Vd?
@@ -44,10 +41,10 @@ CONSTANTS = {
     # Nucleation birth-death process dynamics
     "g_mul_LTD" : 1/10, 
     "m_mul_LTD" : 10,
-    "g_mul_LTP" : 30, 
-    "m_mul_LTP" : 1/15,
+    "g_mul_LTP" : 25, 
+    "m_mul_LTP" : 1/20,
     "gamma_0" : 0.02, # For now just making sure nothing explodes
-    "mu_0" : 0.25,
+    "mu_0" : 0.5,
     "nf_0" : 0.04,
     "nf_LTP": 15,
     "nf_LTD": 0
@@ -77,8 +74,9 @@ EXPERIMENTAL_DATA = {
     # Kasai Noguchi: 20m = 11 mm, 25% = 8.1 mm
     "sLTD_Kasai_Noguchi": { "deltax": 20/11*np.array([0,5.7,5.5,5.4,5.7,6.0,5.3,11.6]),
                             "y": 1- .25/8.1*np.array([0,4.4,6.3,8.7,8.6,7.9,8.8,8.6])},
-    "renorm_var" : "V_tot"
-}
+    "renorm_var" : "V_tot",
+    "time_unit" : "min"
+ }
 
 from virtual_lab.utils import preprocess_experimental_data
 preprocess_experimental_data(EXPERIMENTAL_DATA)

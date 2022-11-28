@@ -11,7 +11,7 @@ from virtual_lab.experiments import Experiments, Experiment
 from virtual_lab.settings import prefs
 from virtual_lab.model import Model
 from matplotlib.cm import Accent,tab10
-from virtual_lab.utils import select_unique_handles_and_labels
+from virtual_lab.utils import select_unique_handles_and_labels, get_time_unit_in_seconds
 
 # TODO: the current color scheme is not applicable in the case in which you want to compare models
 # on the same plot (they would have the same color coding). 
@@ -87,14 +87,12 @@ class Simulation:
         self.model.prepare_constants(exp,termalizing = True)
         if stochastic:
             self.model.run_stochastic_processes()
-            print("stochastic process run..")
         if hasattr(self.model,"termalization_step"):
             term_func = self.model.termalization_step
         else:
             term_func = self.model.single_step
         for t in range(termalization_time):
             term_func(t)
-        print("termalization process run..")
         # Since we only want to termalize once in most cases, copy the current variable values into their init values
         # so that at the next iteration we can start from there.
         self.model.update_variables_init_values()
@@ -151,16 +149,10 @@ class Simulation:
             if not stochastic or not termalize or not termalized:
                 self.model.initialise_variables(exp,stochastic)
             for k in range(n_of_runs):
-                
                 # INITIALIZE ALL OF THE QUANTITIES FOR THE SIMULATION
                 # If we want to allow the system to termalize on its own
                 if termalize:
-                    # If the system doesn't change between experiments we only run this once!
-                    if not termalized:
-                        print("Termalizing...")
-                        self.termalize_system(termalization_time,exp,stochastic, record_termalization)
-                        termalized = True
-                        print("Termalized")
+                    self.termalize_system(termalization_time,exp,stochastic, record_termalization)
                 if stochastic:
                     self.model.run_stochastic_processes()
                 
@@ -239,7 +231,7 @@ class Simulation:
 
     def plot_volumes(self, results = None, exp_names = None, 
                     time_interval = None, filename = "img.pdf", 
-                    time_in_min = True, step = 1, show_equations = False, **kwargs):
+                    time_unit = "min", step = 1, show_equations = False, **kwargs):
         """
             Plot the volumes computed in the experiments.
         Parameters:
@@ -249,7 +241,7 @@ class Simulation:
             exp_names (list(int)): the list of the experiments to be plotted
             time_interval (tuple,optional): define the time interval to be plotted, defaults to None
             name (string,optional): the name to give to the output image, defaults to 'img.pdf'
-            time_in_min (bool,optional): whether the time axis should be given in minutes or hours, defaults to True
+            time_unit (str,optional): whether the time axis should be given in minutes, seconds or hours, defaults to True
             step (int,optional): step used when slicing the data for the plot, defaults to 1 (all the data)
         
         """
@@ -306,37 +298,39 @@ class Simulation:
         rows = rows+1 if show_equations else rows
         start_index = 1 + cols if show_equations else 1
         if show_equations:
-            models = list(set([result["model"] for result in results]))
+            models = []
+            for result in results:
+                if not result["model"] in models:
+                    models.append(result["model"])
             self.model_equations(models,fig,rows)
         for result in results:
             if result["name"] in exp_names:
+                # TODO generalize this so it can be used in any plot by using kwargs.
                 model_name = result["model"]
                 exp = result["experiment"]
                 idx = exp_names.index(result["name"])
-                start = time_interval[idx][0] if time_interval is not None else 0
-                dt = exp.dt if step is None else step*exp.dt
-                stop = time_interval[idx][1] if time_interval is not None else int(exp.T) 
-                timescale = 60 if time_in_min else 3600
-                time_axis = np.arange(start,stop,dt)/timescale
+                interval = time_interval[idx] if time_interval is not None else None
+                time_axis,timescale,start,stop,_ = self._get_time_quantities(exp,interval,step,time_unit)
                 values = self.reduce_data(result,start,stop,step)
-                # Check if we ran simulations with statistics
-                    #print(len(Vd_t),len(Vs_t))
+                if variables is None:
+                    model_variables = self.models[model_name].variables
+                    model_variables = [var for var in model_variables if var in model_variables.recorded_variables]
+                else:
+                    model_variables = variables
+                min_value = self.get_min_value(values,variables = model_variables,skip_means = False)
+                # If we have saved a 'mean' then also an 'std' for sure will be there.
+                plot_std = sum(['mean_' + name in values.keys() for name in model_variables]) == len(model_variables)
 
+                # Plotting starts here
                 ax = fig.add_subplot(rows,cols,plot_idx+start_index)
 
                 if use_title:
                     plt.title(model_name + ": " + result["name"])
                 
                 plt.plot([start,stop/timescale],[1,1] ,color='0', ls=":")
-                if variables is None:
-                    model_variables = self.models[model_name].variables
-                    model_variables = [var for var in model_variables if var in model_variables.recorded_variables]
-                else:
-                    model_variables = variables
-                # If we have saved a 'mean' then also an 'std' for sure will be there.
-                plot_std = sum(['mean_' + name in values.keys() for name in model_variables]) == len(model_variables)
+
+                
                 # Used later to plot experiment quantities
-                min_value = min(list(self.models[model_name].variables.init_values.values())) 
                 for name in model_variables:
                     if name in values.keys():
                         col = self.color_coding[name]
@@ -345,25 +339,10 @@ class Simulation:
                             plt.fill_between(time_axis,values["mean_" + name] - values["std_"+name],
                                                     values["mean_" + name]+ values["std_" + name],alpha = 0.3,color = col)
                             tmp = min(values['mean_'+name]-values['std_'+name])
-                            min_value = tmp if tmp < min_value else min_value
                         else:
                             plt.plot(time_axis,values[name],label = name,lw = lw, color = col)
-                            min_value = min(values[name]) if min(values[name]) < min_value else min_value
                 if exp.experimental_data is not None:
-                    data_dict = exp.experimental_data
-                    try:
-                        renorm_value = values["mean_" + data_dict["renorm_var"]][0] if plot_std else values[data_dict["renorm_var"]][0]
-                    except KeyError:
-                        renorm_value = 1
-                    # TODO: This is a bit terrible
-                    plot_dict = data_dict.copy()
-                    plot_dict.pop("renorm_var")
-                    self.add_colors(plot_dict.keys())
-                    for data in plot_dict:
-                        col = self.color_coding[data]
-                        # TODO: This is also highly incorrect and should happen in other places
-                        y_data = np.array(data_dict[data]["y"])*renorm_value
-                        plt.plot(data_dict[data]["x"],y_data,label = data,lw = 2,marker = 'x',markersize = 10,ls='--',color = col)
+                    self.plot_experimental_data(exp,values,plot_std,timescale)
                         
                 #plt.plot(np.arange(0,T+dt,dt)/3600, (Vs_t+Vd_t-PSD_95)/2 +shift, label=r'Tag', ls='-.', alpha =0.2)
                 #plt.plot([0,T/3600],[shift,shift] ,color='0', ls=":")
@@ -372,14 +351,14 @@ class Simulation:
                 #plt.plot([0,T/3600],[0.5,0.5] ,color='0', ls=":", alpha=0.2)
 
                 # Plotting the quantities used in our experiment
-                self.plot_experiment_quantities(exp,min_value,model_name,time_axis[-1],timescale,stop)
+                self.plot_experiment_quantities(exp,min_value,model_name,time_axis[-1],timescale)
                 
                 # Styiling and legend
                 # Don't put the ticks on the part of the quantities since they don't mean anything
                 yticks = plt.yticks()[0]
                 yticks = [k for k in yticks if k >= min_value]
                 plt.yticks(yticks)
-                plt.xlabel("t in min")
+                plt.xlabel(f"t in {time_unit}")
                 plt.ylabel(r"% of Volume")
                 if use_legend:
                     handles,labels = ax.get_legend_handles_labels()
@@ -392,10 +371,30 @@ class Simulation:
             plot_handles,plot_labels = select_unique_handles_and_labels(plot_handles,plot_labels)
             plt.legend(plot_handles,plot_labels, bbox_to_anchor = (1,0), loc= 'lower left', ncol=kwargs.get('legend_cols', ceil(len(model_variables)/4)))
         makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
+        #plt.tight_layout()
         fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
     
-    def plot_experiment_quantities(self,exp,min_value,model_name,T,timescale,stop):
+    def plot_experimental_data(self,exp,values,plot_std,timescale):
+        data_dict = exp.experimental_data
+        try:
+            renorm_value = values["mean_" + data_dict["renorm_var"]][0] if plot_std else values[data_dict["renorm_var"]][0]
+        except KeyError:
+            renorm_value = 1
+        # TODO: This is a bit terrible
+        plot_dict = data_dict.copy()
+        plot_dict.pop("renorm_var")
+        plot_dict.pop("time_unit")
+        self.add_colors(plot_dict.keys())
+        for data in plot_dict:
+            col = self.color_coding[data]
+            # TODO: This is also highly incorrect and should happen in other places
+            y_data = np.array(data_dict[data]["y"])*renorm_value
+            data_time_to_seconds = get_time_unit_in_seconds(data_dict["time_unit"])
+            x_data = np.array(data_dict[data]["x"])*data_time_to_seconds/timescale
+            plt.plot(x_data,y_data,label = data,lw = 2,marker = 'x',markersize = 10,ls='--',color = col)
+    
+    def plot_experiment_quantities(self,exp,min_value,model_name,T,timescale):
         quantities = exp()
         sorted_quantities = self.sort_by_appearance(quantities.keys())
         # This counter is useful for knowing which of the experiments should determine the legend (the one with the most quantities being plotted)
@@ -405,7 +404,8 @@ class Simulation:
         value_range = max(yticks)-min_value
         # We want this part of the plot to be in proportion to the rest
         positions_range = value_range/4
-        positions = np.arange(min_value-positions_range,min_value-0.1,positions_range/len(quantities.keys()))
+        offset = value_range/10
+        positions = np.arange(min_value-positions_range-offset,min_value-offset,positions_range/len(sorted_quantities))
         self.add_colors(list(quantities.keys()),extra= True)
         # Make a list of the quantities needed for the model, we only want to plot those.
         dep = list(self.models[model_name].quantity_dependencies().values())
@@ -417,7 +417,7 @@ class Simulation:
                 plt.plot([0,T],[pos,pos], color = col, ls = ":", alpha = 1)
                 if quantities[q] is not None and len(quantities[q]):
                     for ton,toff in quantities[q]:
-                        toff = min(toff,stop)
+                        toff = min(toff,T*timescale)
                         plt.plot([ton/timescale,toff/timescale], [pos,pos], color = col,lw = 6)
                     plt.plot([ton/timescale,toff/timescale], [pos,pos],label = q,color = col, lw = 6)
     
@@ -431,7 +431,97 @@ class Simulation:
                 self._ordered_quantities.append(name)
         return [name for name in self._ordered_quantities if name in names]
     
-    def compare_results(self, models = None, exp_names = None, **kwargs):
+    def _get_time_quantities(self, exp, time_interval = None, step = 1,time_unit = "min",**kwargs):
+        start = time_interval[0] if time_interval is not None else 0
+        dt = exp.dt if step is None else step*exp.dt
+        stop = time_interval[1] if time_interval is not None else int(exp.T) 
+        timescale = get_time_unit_in_seconds(time_unit)
+        time_axis = np.arange(start,stop,dt)/timescale
+        return time_axis,timescale,start,stop,dt
+    
+    def get_min_value(self,values,variables = None,skip_means = True):
+        if variables is None:
+            variables = list(values.keys())
+        vals = np.array([])
+        for var in variables:
+            if (not var in values) or "mean" in var:
+                continue
+            if "std" in var and not skip_means:
+                vals = np.append(vals,values["mean_"+var[4:]]-values[var])
+            else:
+                vals = np.append(vals,values[var])
+        return np.min(vals)
+        
+    
+    def compare_experiment_results(self,results,variables, rescale = False, exp_data = False, **kwargs):
+        """
+        Takes different results obtained on the same experiment and compares them in a single plot.
+        Important Note: the rescaling option takes the first result in the list as the reference. If the following results contain multiple 
+        stochastic simulations, each of these simulations will be rescaled, so their relative distribution will be affected!
+        So if you're planning on comparing stochastic and deterministic experiments, and want to keep the true distribution of the stochastic
+        outcomes, then put the corresponding experiment fist in line. 
+        A more sensible rescaling option will be implemented in the future..
+
+        """
+        # TODO: add an option where you could rescale the variables to match the scale.
+        stochastic_styling = kwargs.get("stochastic_styling", "mean")
+        plot_std = False
+        colors = [col for col in self.var_colors]
+        min_values = []
+        fig = plt.figure()
+        for idx, result in enumerate(results):
+            exp = result["experiment"]
+            time_axis,timescale,start,stop,_ = self._get_time_quantities(exp,**kwargs)
+            values = self.reduce_data(result,start,stop,kwargs.get("step",1))
+            min_values.append(self.get_min_value(values,variables = variables))
+            for var in variables:
+                if hasattr(self.models[result["model"]].variables,var) and var in result.keys():
+                    col = colors.pop(0)
+                    # Check if we're plotting a deterministic or stochastic variable
+                    try: 
+                        len(result[var][0])
+                        if rescale:
+                            if idx == 0:
+                                ref_value = values["mean_"+var][0]
+                            else:
+                                for v in values:
+                                    if var in v:
+                                        values[v] = values[v]/values[v][0]*ref_value
+                        plot_std = True
+                    except:
+                        if rescale:
+                            if idx == 0:
+                                ref_value = values[var][0]
+                            else:
+                                values[var] = values[var]/values[var][0]*ref_value
+                        plot_std = False
+                    if not plot_std:
+                        if "traces" in stochastic_styling:
+                            # TODO: this is temporary
+                            colors.insert(0,col)
+                            col = 'darkslateblue'
+                        plt.plot(time_axis, values[var],color = col)
+                    else:
+                        if "mean" in stochastic_styling:
+                            std = "std_" + var 
+                            var = "mean_"+var
+                            plt.plot(time_axis, values[var],color = col)
+                            plt.fill_between(time_axis,values[var]-values[std],values[var]+values[std],alpha = 0.2,color = col)
+                        elif "traces" in stochastic_styling:
+                            for k in range(min(len(values[var]),len(self.extra_colors))):
+                                # Put the color we picked back in the list
+                                colors.insert(0,col)
+                                # Choose from a different list
+                                col = self.extra_colors[k]
+                                plt.plot(time_axis, values[var][k],color = col, alpha = 0.7)
+        min_value = np.min(min_values)
+        self.plot_experiment_quantities(exp,min_value,result["model"],time_axis[-1],timescale)
+        if exp.experimental_data and exp_data:
+                self.plot_experimental_data(exp,values,plot_std,timescale)
+        plt.show()
+    
+    def compare_models(self, models = None, exp_names = None, **kwargs):
+        #TODO: finish!
         if exp_names is None: exp_to_plot = []
         for model in models:
             model_experiments = [result["experiment"].name for result in self.model_results[model]]
@@ -629,8 +719,10 @@ class Simulation:
                 p = points[varname][idx] if n_plots >1 else points[varname]
                 plt.plot(t_axis,p,label = varname, color = self.color_coding[varname])
             if reference_values is not None:
-                for val in reference_values[idx]:
-                    plt.plot([time_axis[0],time_axis[-1]],[val,val],label = kwargs.get('ref_label',"reference"))
+                default_labels = [f"ref {j}" for j in range(len(reference_values))]
+                for i,val in enumerate(reference_values[idx]):
+                    l = kwargs.get('ref_labels',default_labels)[i]
+                    plt.plot([time_axis[0],time_axis[-1]],[val,val],label = l)
             plt.xlabel("Time in m")
             plt.ylabel(kwargs.get('ylabel','% of baseline'))
             plt.legend()

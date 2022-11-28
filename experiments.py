@@ -30,7 +30,7 @@ class Experiment:
                 new_q.append([ton,duration])
             exp_const[name] = new_q
 
-        return Experiment(self.name,exp_const,T = self.T,dt = self.dt)
+        return Experiment(self.name,exp_const,T = self.T,dt = self.dt, exp_data = self.experimental_data)
     
     def add_event(self,name,intervals):
         setattr(self,name,[[onset,onset+duration] for onset,duration in intervals])
@@ -97,14 +97,18 @@ import json
 with open("experimental_data.json","r") as file:
     exp_data = json.load(file)
 
+# TODO: this looks terrible, I have to implement a better experimental data management system
 data_LTP = {}
 names = [name for name in exp_data if "sLTP" in name]
 names.append("renorm_var")
+names.append("time_unit")
 for name in names:
     data_LTP[name] = exp_data[name]
 data_LTD = {}
 names = [name for name in exp_data if "sLTD" in name]
 names.append("renorm_var")
+names.append("time_unit")
+
 for name in names:
     data_LTD[name] = exp_data[name]
 
@@ -172,20 +176,20 @@ STC_TR15 = Experiment("STC_TR15",
                         "protein" : [[300+P_ONSET, PROTEIN]] })  
 
 BasicExperiments.add(STC_TR15)
-STC_DR5 = Experiment("STC_DR5",
-                     {"stim": [[600, STET]],
-                      "LFS": [[300,LFS]],
-                      "xlinkers": [[300,X_LFS],[600,X_STET]],
-                      "protein": [[300+P_ONSET,PROTEIN]]})
+# STC_DR5 = Experiment("STC_DR5",
+#                      {"stim": [[600, STET]],
+#                       "LFS": [[300,LFS]],
+#                       "xlinkers": [[300,X_LFS],[600,X_STET]],
+#                       "protein": [[300+P_ONSET,PROTEIN]]})
 
-BasicExperiments.add(STC_DR5)
-STC_DR15 = Experiment("STC_DR15",
-                     {"stim": [[1200, STET]],
-                      "LFS": [[300,LFS]],
-                      "xlinkers": [[300,X_LFS],[1200,X_STET]],
-                      "protein": [[300+P_ONSET,PROTEIN]]})
+# BasicExperiments.add(STC_DR5)
+# STC_DR15 = Experiment("STC_DR15",
+#                      {"stim": [[1200, STET]],
+#                       "LFS": [[300,LFS]],
+#                       "xlinkers": [[300,X_LFS],[1200,X_STET]],
+#                       "protein": [[300+P_ONSET,PROTEIN]]})
 
-BasicExperiments.add(STC_DR15)
+# BasicExperiments.add(STC_DR15)
 LTD = Experiment("LTD",
                  {"stim": [],
                         "LFS": [[300, LFS]],
@@ -228,7 +232,7 @@ MetaPlasticityExperiments = Experiments()
 # Time required to complete one plasticity event
 pt = 3*3600
 n_LTP = 300
-n_LTD = 60
+n_LTD = 3
 n_LTP_mixed = 100
 n_LTD_mixed = 100
 LTP_META = Experiment("LTP_META",
@@ -244,7 +248,7 @@ LTD_META = Experiment("LTD_META",
                      "xlinkers": [[k*pt+10,X_LFS] for k in range(n_LTD)],
                      "protein": [[k*pt+P_ONSET,PROTEIN] for k in range(n_LTD) ]
                      }, T = pt*n_LTD, dt = 10)
-MetaPlasticityExperiments.add(LTD_META)
+# MetaPlasticityExperiments.add(LTD_META)
 
 xlinkers_mixed_metaplaticity = [[k*pt+10,X_STET] for k in range(n_LTP_mixed)]
 for k in range(n_LTD_mixed):
@@ -255,14 +259,14 @@ MIX_META = Experiment("MIX_META",
                      "xlinkers": xlinkers_mixed_metaplaticity,
                      "protein": [[k*pt+P_ONSET,PROTEIN] for k in range(n_LTD_mixed+n_LTP_mixed) ]
                      }, T = pt*(n_LTD_mixed+n_LTP_mixed), dt = 10)
-MetaPlasticityExperiments.add(MIX_META)
+# MetaPlasticityExperiments.add(MIX_META)
 # Experiments for Tag resetting
 import numpy as np
 TagResetExperiments = Experiments([Experiment(f"STC_TR{int(t/60)}",
            {"stim": [[300,STET]],
            "LFS": [[300+t,LFS]],
            "xlinkers": [[300,X_STET],[300+t,X_LFS]],
-           "protein": [[300+P_ONSET,PROTEIN]]},T = 3*3600 + t,dt = 5) for t in np.arange(120,2700,120)])
+           "protein": [[300+P_ONSET,PROTEIN]]},T = 3*3600 + t,dt = 5) for t in np.arange(120,3600,120)])
 
 
 

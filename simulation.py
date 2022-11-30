@@ -91,7 +91,8 @@ class Simulation:
             term_func = self.model.termalization_step
         else:
             term_func = self.model.single_step
-        for t in range(termalization_time):
+        
+        for t in range(exp.steps):
             term_func(t)
         # Since we only want to termalize once in most cases, copy the current variable values into their init values
         # so that at the next iteration we can start from there.
@@ -259,8 +260,8 @@ class Simulation:
         print(f"Plotting {len(results) if exp_names is None else counter} experiments")
         plot_cols = kwargs.get("n_cols",4)
         figsize = kwargs.get('figsize',
-                            (min((len(results) if exp_names is None else counter)*10,20),
-                            min(ceil((len(results) if exp_names is None else counter)/plot_cols)*7,104)))
+                            (min((len(results) if exp_names is None else counter)*6.4,6.4*plot_cols),
+                            min(ceil((len(results) if exp_names is None else counter)/plot_cols)*4.8,4.8*15)))
         fontsize = kwargs.get('fontsize',12)
         use_title = kwargs.get('use_title',True)
         variables = kwargs.get('variables',None)
@@ -370,8 +371,8 @@ class Simulation:
         if use_legend:
             plot_handles,plot_labels = select_unique_handles_and_labels(plot_handles,plot_labels)
             plt.legend(plot_handles,plot_labels, bbox_to_anchor = (1,0), loc= 'lower left', ncol=kwargs.get('legend_cols', ceil(len(model_variables)/4)))
+            plt.tight_layout()
         makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
-        #plt.tight_layout()
         fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
     
@@ -453,7 +454,7 @@ class Simulation:
         return np.min(vals)
         
     
-    def compare_experiment_results(self,results,variables, rescale = False, exp_data = False, **kwargs):
+    def compare_experiment_results(self,results,variables, rescale = False, exp_data = False, filename = "img.png", **kwargs):
         """
         Takes different results obtained on the same experiment and compares them in a single plot.
         Important Note: the rescaling option takes the first result in the list as the reference. If the following results contain multiple 
@@ -464,11 +465,15 @@ class Simulation:
 
         """
         # TODO: add an option where you could rescale the variables to match the scale.
+        use_legend = kwargs.get("use_legend", False)
+        figsize = kwargs.get("figsize",(6 if not use_legend else 8,5))
         stochastic_styling = kwargs.get("stochastic_styling", "mean")
+        if stochastic_styling == "mixed":
+            stochastic_styling = "mean_traces"
         plot_std = False
         colors = [col for col in self.var_colors]
         min_values = []
-        fig = plt.figure()
+        fig = plt.figure(figsize=figsize)
         for idx, result in enumerate(results):
             exp = result["experiment"]
             time_axis,timescale,start,stop,_ = self._get_time_quantities(exp,**kwargs)
@@ -500,24 +505,36 @@ class Simulation:
                             # TODO: this is temporary
                             colors.insert(0,col)
                             col = 'darkslateblue'
-                        plt.plot(time_axis, values[var],color = col)
+                        plt.plot(time_axis, values[var],color = col,label = "deterministic")
                     else:
+                        if "traces" in stochastic_styling:
+                            try:
+                                trace_n = int(stochastic_styling[-1])
+                            except:
+                                trace_n = len(values[var])
+                            if trace_n > len(self.extra_colors):
+                                trace_n = len(self.extra_colors)
+                                warn(f"The requested number of traces is larger than the maximum of {len(self.extra_colors)}, "
+                                "I will only plot the first ones.")
+                            for k in range(trace_n):
+                                # Choose from a different list
+                                trace_col = self.extra_colors[k]
+                                plt.plot(time_axis, values[var][k],color = trace_col, alpha = 0.7, label = "trace")
                         if "mean" in stochastic_styling:
                             std = "std_" + var 
-                            var = "mean_"+var
-                            plt.plot(time_axis, values[var],color = col)
-                            plt.fill_between(time_axis,values[var]-values[std],values[var]+values[std],alpha = 0.2,color = col)
-                        elif "traces" in stochastic_styling:
-                            for k in range(min(len(values[var]),len(self.extra_colors))):
-                                # Put the color we picked back in the list
-                                colors.insert(0,col)
-                                # Choose from a different list
-                                col = self.extra_colors[k]
-                                plt.plot(time_axis, values[var][k],color = col, alpha = 0.7)
+                            mean = "mean_"+var
+                            plt.plot(time_axis, values[mean],color = col, label = "mean")
+                            plt.fill_between(time_axis,values[mean]-values[std],values[mean]+values[std],alpha = 0.2,color = col)
+                        
         min_value = np.min(min_values)
         self.plot_experiment_quantities(exp,min_value,result["model"],time_axis[-1],timescale)
         if exp.experimental_data and exp_data:
                 self.plot_experimental_data(exp,values,plot_std,timescale)
+        if use_legend:
+            plt.legend(bbox_to_anchor = (1,0),loc = "lower left")
+            plt.tight_layout()
+        makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
+        fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
     
     def compare_models(self, models = None, exp_names = None, **kwargs):
@@ -619,8 +636,11 @@ class Simulation:
 
     def plot_selected_points(self,results,variables,selection_idx, 
                         event_type = "stim", event_idx = 60, x_data = None,
-                        reference_values = None, save = True, filename = "img.pdf", **kwargs):
+                        reference_values = None, reference_data = None, save = True, filename = "img.pdf", **kwargs):
         # TODO: add possibility to plot from multiple results (i.e. a list or dictionary of results like above)
+        # TODO: general thing, implement a figure class which makes it easier to manipulate images without the need to:
+        # 1. Always call these plotting functions with 100 arguments
+        # 2. Always re-plot everything and keep adding functionalities which would be shared among all plots you can do with this package.
         if not isinstance(results,list):
             if isinstance(results,dict):
                 results = [results]
@@ -666,25 +686,35 @@ class Simulation:
                     for varname in variables:
                         points[varname].append(result[varname][int(time_axis[-1]/dt)])
                     titles.append(result["model"] + ":" + result["name"])
+                x_is_time = True
             else:
                 # Assuming you just want the experiments to be numbered
                 # TODO: could give an option to specify what to put on the time axis
                 time_axis.append(len(time_axis))
+                x_is_time = False
                 for varname in variables:
                     points[varname].append(result[varname][selection_idx])
                 titles.append(f"{result['model']}:{result['name']}")
-        if x_data is not None: # Override the time axis, but only if they're compatible
-            if len(x_data) != len(time_axis):
-                warn("The x_data you gave is not compatible with the number of points in the plot, "
-                "currently not using it.")
-            else:
-                if not isinstance(x_data[0],list) or isinstance(x_data[0],np.ndarray):
-                    time_axis = x_data
-                else:
-                    raise NotImplementedError("Multiple x_data for these plots is currently not supported.")
         
         n_plots = 1 if not isinstance(points[variables[0]][0],list) else len(results)
         print(f"Making {n_plots} plots")
+        # TODO this is not optimal, also, currently not supporting multiple x_data arrays
+        if x_data is not None: # Override the time axis, but only if they're compatible
+            if n_plots> 1:
+                for idx,time in enumerate(time_axis):
+                    if len(x_data) != len(time):
+                        warn("The x_data you gave is not compatible with the number of points in the plot, "
+                        "currently not using it.")
+                    else:
+                        time_axis[idx] = x_data
+                        x_is_time = False
+            else: 
+                if len(x_data) != len(time_axis):
+                    warn("The x_data you gave is not compatible with the number of points in the plot, "
+                        "currently not using it.")
+                else:
+                    time_axis = x_data
+                    x_is_time = False
         if reference_values is not None:
             # Making sure the formatting is done correctly
             if isinstance(reference_values,list):
@@ -699,12 +729,17 @@ class Simulation:
                         reference_values = [reference_values for k in range(n_plots)]
             else:
                 reference_values = [[reference_values] for k in range(n_plots)]
-        # Convert time to minutes 
-        if kwargs.get("time_in_m",True):
+        if reference_data is not None:
+            if n_plots > 1:
+                raise ValueError("Currently only one dimensional arrays of reference data are supported, so this will be used for all plots.")
+            assert len(reference_data) == len(time_axis)
+        # Convert time to minutes
+        if x_is_time:
+            time_unit = get_time_unit_in_seconds(kwargs.get("time_unit","m"))
             if n_plots> 1:
-                time_axis = [[int(t/60) for t in time_axis[i]] for i in range(len(time_axis))]
+                time_axis = [[int(t/time_unit) for t in time_axis[i]] for i in range(len(time_axis))]
             else:
-                time_axis = [int(t/60) for t in time_axis]
+                time_axis = [int(t/time_unit) for t in time_axis]
 
         plot_cols = kwargs.get('n_cols',3)
         figsize = kwargs.get('figsize',(
@@ -713,6 +748,9 @@ class Simulation:
         fontsize = kwargs.get('fontsize',12)
         fig = plt.figure(figsize=figsize)
         for idx in range(n_plots):
+            if reference_data is not None:
+                t_axis = time_axis
+                plt.plot(t_axis,reference_data,label = kwargs.get("ref_data_label","ref"))
             plt.subplot(ceil(n_plots/plot_cols),plot_cols if n_plots >= plot_cols else n_plots,idx+1)
             for varname in variables:
                 t_axis = time_axis[idx] if n_plots > 1 else time_axis
@@ -723,7 +761,7 @@ class Simulation:
                 for i,val in enumerate(reference_values[idx]):
                     l = kwargs.get('ref_labels',default_labels)[i]
                     plt.plot([time_axis[0],time_axis[-1]],[val,val],label = l)
-            plt.xlabel("Time in m")
+            plt.xlabel("Time in m" if x_is_time else kwargs.get("x_label","iterations"))
             plt.ylabel(kwargs.get('ylabel','% of baseline'))
             plt.legend()
             plt.title(titles[idx]) 

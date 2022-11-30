@@ -43,8 +43,11 @@ class Experiments:
         Just a simple container for various experiments
         """
         self.experiments = []
+        self._exp_names = []
         if experiments is not None:
             self.add(experiments)
+        
+    exp_names = property(lambda self: self._exp_names)
 
     def add(self, experiments):
         try:
@@ -57,6 +60,7 @@ class Experiments:
                 "instances of the Experiment class, instead I found a"
                 f"{type(experiment)} type")
             self.experiments.append(experiment)
+            self.exp_names.append(experiment.name)
 
     def __iter__(self):
         return iter(self.experiments)
@@ -65,9 +69,10 @@ class Experiments:
         return len(self.experiments)
 
     def get_experiment(self, _name: str):
-        for experiment in self.experiments:
-            if experiment.name == _name:
-                return experiment
+        if _name in self.exp_names:
+            for experiment in self.experiments:
+                if experiment.name == _name:
+                    return experiment
         raise Warning("Experiment wasn't found. Make sure you are using the" 
                     "correct name")
 
@@ -104,7 +109,7 @@ names.append("renorm_var")
 names.append("time_unit")
 for name in names:
     data_LTP[name] = exp_data[name]
-data_LTD = {}
+data_LTD = {}   
 names = [name for name in exp_data if "sLTD" in name]
 names.append("renorm_var")
 names.append("time_unit")
@@ -118,13 +123,13 @@ NO_STIMULI = Experiment("NO_STIMULI",
                 {"protein" : [], 
                 "xlinkers": [], 
                 "stim": [], 
-                "LFS": []})
+                "LFS": []},T = 10*3600)
 BasicExperiments.add(NO_STIMULI)
 W_TET = Experiment("W_TET",
                   {"protein" : [], 
                   "xlinkers": [[300,X_WTET]], 
                   "stim": [[300,WTET]], 
-                  "LFS": []}, T = 3*3600)
+                  "LFS": []}, T = 20*3600)
 BasicExperiments.add(W_TET)
 S_TET = Experiment("S_TET",
                     {"stim": [[300,STET]], 
@@ -203,7 +208,7 @@ W_LFS = Experiment("W_LFS",
                         "LFS": [[300, LFS]],
                         "xlinkers": [[300, X_LFS]],
                         "protein" : [] },
-                         T = 15*3600,dt = 5)  
+                         T = int(15*3600),dt = 5)  
 
 BasicExperiments.add(W_LFS)
 STC_LTD_WBS = Experiment("STC_LTD_WBS",
@@ -267,6 +272,19 @@ TagResetExperiments = Experiments([Experiment(f"STC_TR{int(t/60)}",
            "LFS": [[300+t,LFS]],
            "xlinkers": [[300,X_STET],[300+t,X_LFS]],
            "protein": [[300+P_ONSET,PROTEIN]]},T = 3*3600 + t,dt = 5) for t in np.arange(120,3600,120)])
+
+LTPSpacingExperiments = Experiments([Experiment(f"LTPx2_{int(t/60)}",
+           {"stim": [[300,STET],[300+STET+ t,STET]],
+           "LFS": [],
+           "xlinkers": [[300,X_STET],[300+STET+t,X_STET]],
+           "protein": [[300+P_ONSET+(PROTEIN+t)*k,PROTEIN] for k in [0,1]] if t/(300+P_ONSET+PROTEIN)>1 else [[300+P_ONSET,PROTEIN]]},
+           T = 5*3600 + t,dt = 5) for t in np.arange(120,7200,120)])
+
+MultiLTPExperiments = Experiments([Experiment(f"MULTI-{n_stim}",
+           {"stim": [[300+k*180,STET] for k in range(n_stim)],
+           "LFS": [],
+           "xlinkers": [[300+k*180,X_STET] for k in range(n_stim)],
+           "protein": [[300+P_ONSET,PROTEIN]]},T = 3*3600,dt = 5) for n_stim in range(0,11)])
 
 
 

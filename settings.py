@@ -8,6 +8,7 @@ class Preferences:
         self._constants_directory = path
     # TODO: Allow automatic detection of custom constants file to select default constants for class initialization.
     constants_directory = property(fget = lambda self: self._constants_directory, fset = set_constants_directory) 
+    default_figsize = (6,5 ) #TODO implement this in the simulation class!
     
     
 

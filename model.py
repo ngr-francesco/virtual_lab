@@ -85,7 +85,7 @@ class Variables:
 
 
 class Model:
-    def __init__(self,name:str, model_variables:dict, const:dict = CONSTANTS, record = True):
+    def __init__(self,name:str, model_variables:dict, const:dict = CONSTANTS, labels = None, record = True):
         # TODO: Implement a dictionary system for stochastic variables, right now it only works for a single one!
         self.const = const
         self.name = name
@@ -98,6 +98,7 @@ class Model:
         self.model_equations = self.equations_dict()
         self.diff_equations = self.diff_equations_dict()
         self.stochastic_variables = self.stochastic_variables_dict()
+        self.labels = labels if labels is not None else {}
     
     # Some proxy methods (not sure if this is legit but I guess it's okay)
     @property
@@ -124,13 +125,7 @@ class Model:
 
     def __repr__(self):
         # TODO: finish implementation
-        _str = f"{self.name} model:\n"
-        _str += "Differential equations:"
-        for eq in self.diff_equations.values():
-            _str += eq["simpy"] + "\n"
-        _str += "Other time dependent quantities:"
-        for eq in self.model_equations.values():
-            _str += eq["simpy"] + "\n"
+        _str = self.name
         return _str
     
     def update_constants(self,const):
@@ -163,14 +158,16 @@ class Model:
         self.variables.init_values = new_init_values
     
     def set_initial_values(self,stochastic):
-        raise NotImplementedError
+        warn("Currently the method 'set_initial_values' is not implemented, this implies"
+             " that all the variable and constant initial values were given through the const argument at "
+             "initialization of the Model class.")
     
     def initialise_variables(self,exp,stochastic):
         if stochastic:
             self.prepare_constants(exp,termalizing = True,exclude_stochastic=stochastic)
             if stochastic:
                 self.run_stochastic_processes()
-            # We initialise the model here by using the values obtained from the "basal" stochastic process
+        # We initialise the model here by using the values obtained from the "basal" stochastic process
         self.set_initial_values(stochastic)
         self.update_variables_init_values()
         if stochastic:
@@ -220,7 +217,7 @@ class Model:
         """
         Since stochasticity is not necessarily needed, we just return None and if needed the user needs to implement it
         """
-        return None
+        return {}
     
     def single_step(self,t):
         output = {}

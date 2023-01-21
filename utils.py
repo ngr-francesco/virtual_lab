@@ -124,6 +124,19 @@ def bd_process(*args, dt = 1, seed = None, **kwargs):
         n[k] = bd_step(n[k-1],gamma[k],mu[k],dt)
     return n 
 
+def random_walk(steps,x_0=0,p = .5, dx = 1,seed = None, **kwargs):
+    """
+    A simple implementation of a random walker. 
+    x_0 sets the initial position
+    p sets the probability to go forward (1-p for backwards) 
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    choices = np.random.rand(steps)
+    return np.cumsum(np.where(choices>p,dx,-dx))+x_0
+
+
+
 def preprocess_experimental_data(data,datasheet_name = "experimental_data.json"):
     """
     This function is mainly to manage my specific data, so it's useless for data formatted in any other way.

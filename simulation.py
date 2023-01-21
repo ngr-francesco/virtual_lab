@@ -7,11 +7,15 @@ from os import makedirs
 from copy import deepcopy
 from itertools import chain
 from time import perf_counter
+import json
+
 from virtual_lab.experiments import Experiments, Experiment
 from virtual_lab.settings import prefs
 from virtual_lab.model import Model
 from matplotlib.cm import Accent,tab10
+from matplotlib.colors import TABLEAU_COLORS
 from virtual_lab.utils import select_unique_handles_and_labels, get_time_unit_in_seconds
+
 
 # TODO: the current color scheme is not applicable in the case in which you want to compare models
 # on the same plot (they would have the same color coding). 
@@ -34,16 +38,57 @@ class Simulation:
             self.models = {model.name: model}
         else:
             self.models = {}
-            print("Initializing a simulation without a given model, a model should be added before running any experiment"
+            print("Initializing a simulation without a given model. A model should be added before running any experiment"
             " by calling Simulation.add_model()")
         self.model_results = {}
         self.prefs = kwargs.get("settings",prefs)
+        load_prefs = kwargs.get("load_preferences",True)
         self.color_coding = kwargs.get("colors", {})
         # This should be made so you can plot more things in case it's needed..
         self.var_colors = tab10(range(10)).tolist()
         self.extra_colors = Accent(range(7)).tolist()
-        # This is not optimal, should be taken care of in another place.
+        self.additional_var_colors = list(TABLEAU_COLORS.keys())
         self._ordered_quantities = []
+        if load_prefs:
+            self.load_user_prefs()
+        # This is not optimal, should be taken care of in another place.
+        
+    
+    def save_user_prefs(self):
+        makedirs(self.prefs.user_prefs_directory[:-1],exist_ok=True)
+        dict_to_save = {
+            "color_coding": self.color_coding,
+            "var_colors": self.var_colors,
+            "extra_colors": self.extra_colors,
+            "_ordered_quantities": self._ordered_quantities
+        }
+        with open(self.prefs.user_prefs_directory+"user_prefs.json","w+") as file:
+            json.dump(dict_to_save,file)
+    
+    def load_user_prefs(self):
+        try:
+            with open(self.prefs.user_prefs_directory+"user_prefs.json","r") as file:
+                prefs = json.load(file)
+            for var in prefs["color_coding"]:
+                tot_cols = self.var_colors
+                tot_cols.append(self.extra_colors)
+                if not prefs["color_coding"][var] in tot_cols:
+                    self.reset_available_colors(prefs["color_coding"])
+                    prefs.pop("var_colors")
+                    prefs.pop("extra_colors")
+                    break
+            for varname in prefs:
+                setattr(self,varname,prefs[varname])      
+        except FileNotFoundError:
+            pass
+    
+    def reset_available_colors(self,color_coding):
+        print("Resetting variable colors...")
+        for col in color_coding.values():
+            if col in self.var_colors:
+                self.var_colors.pop(self.var_colors.index(col))
+            if col in self.extra_colors:
+                self.extra_colors.pop(self.extra_colors.index(col))
 
     def add_model(self,model, switching = True):
         self.models[model.name] = model
@@ -54,14 +99,17 @@ class Simulation:
         
         self.add_colors(model.variables.varnames)
     
-    def add_colors(self,varnames, extra = False):
+    def add_colors(self,varnames, extra = False, additional = False):
         for var in varnames:
             if not var in self.color_coding:
                 # Just linearly go through the list of available colors
                 if extra:
                     self.color_coding[var] = self.extra_colors.pop(0)
+                elif additional:
+                    self.color_coding[var] = self.additional_var_colors.pop(0)
                 else:
                     self.color_coding[var] = self.var_colors.pop(0)
+        self.save_user_prefs()
 
     def switch_model(self,model):
         if isinstance(model,Model):
@@ -161,7 +209,6 @@ class Simulation:
                 # TODO check if this is considerably faster if done within the model
                 for t in range(exp.steps):
                     self.model.single_step(t)
-                # Save the data
                 
                 try:
                     for var in variables_to_record:
@@ -193,6 +240,13 @@ class Simulation:
         print(f"Simulating {len(experiments)} experiments took: {duration:.3f} s")
         plt.show()
         return results
+
+    def run_variable_perturbation(self,varnames,delta):
+        """
+        Initialize the system in its stationary state (if there is one). Then perturb one of the variables to 
+        measure the relaxation process. Particularly useful for models which cannot be integrated analytically.
+        """
+        
     
     def reduce_data(self,values, start,stop,step=1):
         new_values = {}
@@ -216,7 +270,7 @@ class Simulation:
         elif isinstance(models,str):
             models = [self.models[models]]
         # Only look at the width, the height will be fixed
-        figsize = (kwargs.get('figsize',(8,6)))
+        figsize = (kwargs.get('figsize',self.prefs.determine_figsize(1,1,False)))
         if figure == None:
             figure = plt.figure(figsize=figsize)
         for i,model in enumerate(models):
@@ -230,7 +284,7 @@ class Simulation:
             ax.set_axis_off()
 
 
-    def plot_volumes(self, results = None, exp_names = None, 
+    def plot_results(self, results = None, exp_names = None, 
                     time_interval = None, filename = "img.pdf", 
                     time_unit = "min", step = 1, show_equations = False, **kwargs):
         """
@@ -257,17 +311,19 @@ class Simulation:
                 for result in results:
                     if exp == result["experiment"].name:
                         counter += 1
-        print(f"Plotting {len(results) if exp_names is None else counter} experiments")
-        plot_cols = kwargs.get("n_cols",4)
-        figsize = kwargs.get('figsize',
-                            (min((len(results) if exp_names is None else counter)*6.4,6.4*plot_cols),
-                            min(ceil((len(results) if exp_names is None else counter)/plot_cols)*4.8,4.8*15)))
+        n_plots = len(results) if exp_names is None else counter
+        print(f"Plotting {n_plots} experiments")
+        use_legend = kwargs.get('legend', True)
+        separate_legend = kwargs.get('separate_legend', False)
+        plot_cols = kwargs.get("n_cols",min(n_plots,4))
+        plot_rows = ceil(n_plots/plot_cols)
+        figsize = kwargs.get('figsize',self.prefs.determine_figsize(plot_rows,plot_cols,use_legend,separate_legend))
         fontsize = kwargs.get('fontsize',12)
         use_title = kwargs.get('use_title',True)
         variables = kwargs.get('variables',None)
         lw = kwargs.get('lw',3)
-        use_legend = kwargs.get('legend', True)
-        fig = plt.figure(1, figsize=figsize)
+        fig = plt.figure(figsize=figsize)
+        plt.rcParams['font.size'] = fontsize
         # Taking care that the experiments to be plotted are in the right format
         if exp_names is None:
             exp_names = [result["name"] for result in results]
@@ -294,6 +350,7 @@ class Simulation:
                 time_interval = tmp
         plot_handles,plot_labels = np.array([]),np.array([])
         plot_idx = 0
+        add_col_idx = 0
         rows = ceil(len(results)/plot_cols)
         cols = (plot_cols if len(results) >= plot_cols else len(results))
         rows = rows+1 if show_equations else rows
@@ -304,6 +361,7 @@ class Simulation:
                 if not result["model"] in models:
                     models.append(result["model"])
             self.model_equations(models,fig,rows)
+        axes = []
         for result in results:
             if result["name"] in exp_names:
                 # TODO generalize this so it can be used in any plot by using kwargs.
@@ -323,33 +381,34 @@ class Simulation:
                 plot_std = sum(['mean_' + name in values.keys() for name in model_variables]) == len(model_variables)
 
                 # Plotting starts here
-                ax = fig.add_subplot(rows,cols,plot_idx+start_index)
-
+                reference_axis = int(plot_idx/cols)*cols
+                print(reference_axis)
+                axes.append(fig.add_subplot(rows,cols,plot_idx+start_index,sharey=axes[reference_axis] if plot_idx%cols!=0 else None))
                 if use_title:
                     plt.title(model_name + ": " + result["name"])
-                
+                # FIXME: This is not generally useful, remove!
                 plt.plot([start,stop/timescale],[1,1] ,color='0', ls=":")
 
-                
-                # Used later to plot experiment quantities
                 for name in model_variables:
                     if name in values.keys():
-                        col = self.color_coding[name]
+                        ls = '-'
+                        if "ref" in name:
+                            ls = ':'
+                        try:
+                            col = self.color_coding[name]
+                        except:
+                            self.add_colors([name],additional = True)
+                            col = self.color_coding[name]
+                        var_label = self.determine_label(name)
                         if plot_std:
-                            plt.plot(time_axis, values["mean_" + name], label = name, lw = lw,color = col)
+                            plt.plot(time_axis, values["mean_" + name], label = var_label, lw = lw,color = col,ls = ls)
                             plt.fill_between(time_axis,values["mean_" + name] - values["std_"+name],
                                                     values["mean_" + name]+ values["std_" + name],alpha = 0.3,color = col)
                             tmp = min(values['mean_'+name]-values['std_'+name])
                         else:
-                            plt.plot(time_axis,values[name],label = name,lw = lw, color = col)
+                            plt.plot(time_axis,values[name],label = var_label,lw = lw, color = col,ls = ls)
                 if exp.experimental_data is not None:
                     self.plot_experimental_data(exp,values,plot_std,timescale)
-                        
-                #plt.plot(np.arange(0,T+dt,dt)/3600, (Vs_t+Vd_t-PSD_95)/2 +shift, label=r'Tag', ls='-.', alpha =0.2)
-                #plt.plot([0,T/3600],[shift,shift] ,color='0', ls=":")
-
-                #plt.plot(np.arange(0,T+dt,dt)/3600,Vd_t /(Vs_t+Vd_t)-eql+0.5, ls=":", label=r'Diff from Eql.')
-                #plt.plot([0,T/3600],[0.5,0.5] ,color='0', ls=":", alpha=0.2)
 
                 # Plotting the quantities used in our experiment
                 self.plot_experiment_quantities(exp,min_value,model_name,time_axis[-1],timescale)
@@ -358,11 +417,17 @@ class Simulation:
                 # Don't put the ticks on the part of the quantities since they don't mean anything
                 yticks = plt.yticks()[0]
                 yticks = [k for k in yticks if k >= min_value]
+                # TODO: remove this line!
+                yticks.insert(0,0)
                 plt.yticks(yticks)
                 plt.xlabel(f"t in {time_unit}")
-                plt.ylabel(r"% of Volume")
+                plt.ylabel(kwargs.get("ylabel",r"Volume in $\mu m^3$"))
+                # # REMOVE THIS!
+                # if result["model"] == "PSD Layering":
+                #     plt.ylim(top = 1.6)
+                #     plt.yticks([0.0,0.5,1.0,1.5])
                 if use_legend:
-                    handles,labels = ax.get_legend_handles_labels()
+                    handles,labels = axes[plot_idx].get_legend_handles_labels()
                     plot_handles= np.append(plot_handles,handles)
                     plot_labels= np.append(plot_labels, labels)
                 plot_idx += 1
@@ -370,11 +435,40 @@ class Simulation:
         # Save figure in the plots directory
         if use_legend:
             plot_handles,plot_labels = select_unique_handles_and_labels(plot_handles,plot_labels)
-            plt.legend(plot_handles,plot_labels, bbox_to_anchor = (1,0), loc= 'lower left', ncol=kwargs.get('legend_cols', ceil(len(model_variables)/4)))
-            plt.tight_layout()
+            if not kwargs.get("separate_legend",False):
+                plt.legend(plot_handles,plot_labels, bbox_to_anchor = (1,0), loc= 'lower left', ncol=kwargs.get('legend_cols', ceil(len(model_variables)/10)))
+                plt.tight_layout()
+            else:
+                self.plot_separate_legend(plot_handles,plot_labels,filename= filename)
+                
         makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
+        fig.tight_layout()
         fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
+
+
+    def plot_separate_legend(self,plot_handles = None,plot_labels= None, axis = None, filename = ".png"):
+        if plot_handles is None or plot_labels is None:
+            plot_handles,plot_labels = axis.get_legend_handles_labels()
+        # We want quantities to be always after variables in the legend
+        tmp_l,tmp_h = plot_labels.copy(),plot_handles.copy()
+        for label in plot_labels:
+            if not self.determine_varname(label) in self._ordered_quantities:
+                continue
+            idx = tmp_l.index(label)
+            l = tmp_l.pop(idx)
+            h = tmp_h.pop(idx)
+            tmp_l.append(l)
+            tmp_h.append(h)
+        plot_handles,plot_labels = tmp_h,tmp_l
+        figl, axl = plt.subplots()
+        axl.axis(False)
+        ncols = min(ceil(len(plot_labels)/4),2)
+        axl.legend(plot_handles,plot_labels, loc="center", bbox_to_anchor=(0.5, 0.5),frameon = True,
+                    edgecolor = "k", ncol = ncols)
+        figl.tight_layout(pad = 0)
+        figl.savefig(self.prefs.plot_directory + "legend_" + filename, transparent= True,
+                    bbox_inches='tight',pad_inches = 0, dpi = 200)
     
     def plot_experimental_data(self,exp,values,plot_std,timescale):
         data_dict = exp.experimental_data
@@ -404,7 +498,7 @@ class Simulation:
         yticks = plt.yticks()[0]
         value_range = max(yticks)-min_value
         # We want this part of the plot to be in proportion to the rest
-        positions_range = value_range/4
+        positions_range = value_range/5
         offset = value_range/10
         positions = np.arange(min_value-positions_range-offset,min_value-offset,positions_range/len(sorted_quantities))
         self.add_colors(list(quantities.keys()),extra= True)
@@ -420,7 +514,8 @@ class Simulation:
                     for ton,toff in quantities[q]:
                         toff = min(toff,T*timescale)
                         plt.plot([ton/timescale,toff/timescale], [pos,pos], color = col,lw = 6)
-                    plt.plot([ton/timescale,toff/timescale], [pos,pos],label = q,color = col, lw = 6)
+                    q_label = self.determine_label(q)
+                    plt.plot([ton/timescale,toff/timescale], [pos,pos],label = q_label,color = col, lw = 6)
     
     def sort_by_appearance(self,names):
         """
@@ -434,7 +529,7 @@ class Simulation:
     
     def _get_time_quantities(self, exp, time_interval = None, step = 1,time_unit = "min",**kwargs):
         start = time_interval[0] if time_interval is not None else 0
-        dt = exp.dt if step is None else step*exp.dt
+        dt = step*exp.dt
         stop = time_interval[1] if time_interval is not None else int(exp.T) 
         timescale = get_time_unit_in_seconds(time_unit)
         time_axis = np.arange(start,stop,dt)/timescale
@@ -454,7 +549,7 @@ class Simulation:
         return np.min(vals)
         
     
-    def compare_experiment_results(self,results,variables, rescale = False, exp_data = False, filename = "img.png", **kwargs):
+    def compare_experiment_results(self,results,variables, rescale = False, exp_data = False, filename = "img.png", multi_plot = 1, **kwargs):
         """
         Takes different results obtained on the same experiment and compares them in a single plot.
         Important Note: the rescaling option takes the first result in the list as the reference. If the following results contain multiple 
@@ -466,73 +561,88 @@ class Simulation:
         """
         # TODO: add an option where you could rescale the variables to match the scale.
         use_legend = kwargs.get("use_legend", False)
-        figsize = kwargs.get("figsize",(6 if not use_legend else 8,5))
-        stochastic_styling = kwargs.get("stochastic_styling", "mean")
-        if stochastic_styling == "mixed":
-            stochastic_styling = "mean_traces"
-        plot_std = False
-        colors = [col for col in self.var_colors]
-        min_values = []
-        fig = plt.figure(figsize=figsize)
-        for idx, result in enumerate(results):
-            exp = result["experiment"]
-            time_axis,timescale,start,stop,_ = self._get_time_quantities(exp,**kwargs)
-            values = self.reduce_data(result,start,stop,kwargs.get("step",1))
-            min_values.append(self.get_min_value(values,variables = variables))
-            for var in variables:
-                if hasattr(self.models[result["model"]].variables,var) and var in result.keys():
-                    col = colors.pop(0)
-                    # Check if we're plotting a deterministic or stochastic variable
-                    try: 
-                        len(result[var][0])
-                        if rescale:
-                            if idx == 0:
-                                ref_value = values["mean_"+var][0]
-                            else:
-                                for v in values:
-                                    if var in v:
-                                        values[v] = values[v]/values[v][0]*ref_value
-                        plot_std = True
-                    except:
-                        if rescale:
-                            if idx == 0:
-                                ref_value = values[var][0]
-                            else:
-                                values[var] = values[var]/values[var][0]*ref_value
-                        plot_std = False
-                    if not plot_std:
-                        if "traces" in stochastic_styling:
-                            # TODO: this is temporary
-                            colors.insert(0,col)
-                            col = 'darkslateblue'
-                        plt.plot(time_axis, values[var],color = col,label = "deterministic")
-                    else:
-                        if "traces" in stochastic_styling:
-                            try:
-                                trace_n = int(stochastic_styling[-1])
-                            except:
-                                trace_n = len(values[var])
-                            if trace_n > len(self.extra_colors):
-                                trace_n = len(self.extra_colors)
-                                warn(f"The requested number of traces is larger than the maximum of {len(self.extra_colors)}, "
-                                "I will only plot the first ones.")
-                            for k in range(trace_n):
-                                # Choose from a different list
-                                trace_col = self.extra_colors[k]
-                                plt.plot(time_axis, values[var][k],color = trace_col, alpha = 0.7, label = "trace")
-                        if "mean" in stochastic_styling:
-                            std = "std_" + var 
-                            mean = "mean_"+var
-                            plt.plot(time_axis, values[mean],color = col, label = "mean")
-                            plt.fill_between(time_axis,values[mean]-values[std],values[mean]+values[std],alpha = 0.2,color = col)
-                        
-        min_value = np.min(min_values)
-        self.plot_experiment_quantities(exp,min_value,result["model"],time_axis[-1],timescale)
-        if exp.experimental_data and exp_data:
-                self.plot_experimental_data(exp,values,plot_std,timescale)
+        separate_legend = kwargs.get('separate_legend', False)
+        if multi_plot != 1:
+            assert len(results) == multi_plot
+            multi_results = results
+        else:
+            multi_results = [results]
+        for multi_plot_idx,results in enumerate(multi_results):
+            if multi_plot_idx == 0:
+                figsize = kwargs.get("figsize",self.prefs.determine_figsize(1,multi_plot,use_legend,separate_legend))
+                fig = plt.figure(figsize=figsize)
+                ax = fig.add_subplot(1,multi_plot,1)
+            else:
+                ax = fig.add_subplot(1,multi_plot,multi_plot_idx+1)
+            stochastic_styling = kwargs.get("stochastic_styling", "mean")
+            if stochastic_styling == "mixed":
+                stochastic_styling = "mean_traces"
+            plot_std = False
+            colors = [col for col in self.var_colors]
+            min_values = []
+            for idx, result in enumerate(results):
+                exp = result["experiment"]
+                time_axis,timescale,start,stop,_ = self._get_time_quantities(exp,**kwargs)
+                values = self.reduce_data(result,start,stop,kwargs.get("step",1))
+                min_values.append(self.get_min_value(values,variables = variables))
+                for var in variables:
+                    if hasattr(self.models[result["model"]].variables,var) and var in result.keys():
+                        col = colors.pop(0)
+                        # Check if we're plotting a deterministic or stochastic variable
+                        try: 
+                            len(result[var][0])
+                            if rescale:
+                                if idx == 0:
+                                    ref_value = values["mean_"+var][0]
+                                else:
+                                    for v in values:
+                                        if var in v:
+                                            values[v] = values[v]/values[v][0]*ref_value
+                            plot_std = True
+                        except:
+                            if rescale:
+                                if idx == 0:
+                                    ref_value = values[var][0]
+                                else:
+                                    values[var] = values[var]/values[var][0]*ref_value
+                            plot_std = False
+                        if not plot_std:
+                            if "traces" in stochastic_styling:
+                                # TODO: this is temporary
+                                colors.insert(0,col)
+                                col = 'darkslateblue'
+                            plt.plot(time_axis, values[var],color = col,label = "deterministic")
+                        else:
+                            if "traces" in stochastic_styling:
+                                try:
+                                    trace_n = int(stochastic_styling[-1])
+                                except:
+                                    trace_n = len(values[var])
+                                if trace_n > len(self.extra_colors):
+                                    trace_n = len(self.extra_colors)
+                                    warn(f"The requested number of traces is larger than the maximum of {len(self.extra_colors)}, "
+                                    "I will only plot the first ones.")
+                                for k in range(trace_n):
+                                    # Choose from a different list
+                                    trace_col = self.extra_colors[k]
+                                    plt.plot(time_axis, values[var][k],color = trace_col, alpha = 0.7, label = "trace")
+                            if "mean" in stochastic_styling:
+                                std = "std_" + var 
+                                mean = "mean_"+var
+                                plt.plot(time_axis, values[mean],color = col, label = "mean")
+                                plt.fill_between(time_axis,values[mean]-values[std],values[mean]+values[std],alpha = 0.2,color = col)          
+                plt.xlabel(kwargs.get("xlabel","Time in minutes"))
+                plt.ylabel(kwargs.get("ylabel", "Volume"))
+            min_value = np.min(min_values)
+            self.plot_experiment_quantities(exp,min_value,result["model"],time_axis[-1],timescale)
+            if exp.experimental_data and exp_data:
+                    self.plot_experimental_data(exp,values,plot_std,timescale)
         if use_legend:
-            plt.legend(bbox_to_anchor = (1,0),loc = "lower left")
-            plt.tight_layout()
+            if not separate_legend:
+                plt.legend(bbox_to_anchor = (1,0),loc = "lower left")
+                plt.tight_layout()
+            else:
+                self.plot_separate_legend(axis = ax, filename=filename)
         makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
         fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
@@ -540,6 +650,9 @@ class Simulation:
     def compare_models(self, models = None, exp_names = None, **kwargs):
         #TODO: finish!
         if exp_names is None: exp_to_plot = []
+        if models is None:
+            # If no choice is given, just take all the models for which we have results saved
+            models = [model for model in self.model_results]
         for model in models:
             model_experiments = [result["experiment"].name for result in self.model_results[model]]
             if not model in self.models:
@@ -562,9 +675,10 @@ class Simulation:
         if exp_names is None: exp_names = exp_to_plot
         results = []
         for exp in exp_names:
+            # Currently this function is not implemented correctly
             result = self.compose_results(exp,models)
             results.append(result)
-        self.plot_volumes(results, **kwargs)
+        self.plot_results(results, **kwargs)
     
     def compose_results(self,exp,models, save_model = False):
         """
@@ -611,7 +725,7 @@ class Simulation:
                 results[result["model"]] = result
         result_list = self.sort_results_by_exp(results, exp_names = exp_names)
         # Giving exp_names at this point is useless, but I guess it doesn't hurt
-        self.plot_volumes(result_list,exp_names,n_cols = len(results.keys()), **kwargs)
+        self.plot_results(result_list,exp_names,n_cols = len(results.keys()), **kwargs)
     
     def sort_results_by_exp(self,res_dict, exp_names = None):
         # Not sure if this is necessary but I guess it's a good precaution
@@ -636,140 +750,212 @@ class Simulation:
 
     def plot_selected_points(self,results,variables,selection_idx, 
                         event_type = "stim", event_idx = 60, x_data = None,
-                        reference_values = None, reference_data = None, save = True, filename = "img.pdf", **kwargs):
+                        reference_values = None, reference_data = None, multi_plot = 1,
+                        save = True, filename = "img.pdf", **kwargs):
         # TODO: add possibility to plot from multiple results (i.e. a list or dictionary of results like above)
         # TODO: general thing, implement a figure class which makes it easier to manipulate images without the need to:
         # 1. Always call these plotting functions with 100 arguments
         # 2. Always re-plot everything and keep adding functionalities which would be shared among all plots you can do with this package.
+        
         if not isinstance(results,list):
             if isinstance(results,dict):
                 results = [results]
             else:
                 raise ValueError("The results you gave me are not in the correct format, they should either be a list of dicts or a single dict")
-        if not isinstance(variables,list):
-            variables = [variables]
-        for result in results:
-            for var in variables:
-                if not var in result.keys():
-                    raise KeyError("The name of the variable to plot should match the one given in the results dictionary! "
-                    f"But in the result named {result['name']}, the selected variable is not present.")
-        if not (isinstance(selection_idx,str) or isinstance(selection_idx,int)):
-            raise ValueError("The selection index should be given as a string or an int!")
-
-        if isinstance(selection_idx,str):
-            if not selection_idx in self.prefs.point_selection:
-                raise NotImplementedError(f"The selection index {selection_idx} is currently not supported. "
-                f"The supported string indices are: {self.prefs.point_selection}")
-            # These quantities are useful later when looking for the points to plot
-            multiplier = 1 if not "last" in selection_idx else 0
-            interval_choice = -1 if "after" in selection_idx else 0
-            # This is the only case we can cover here without looking at the results
-            if selection_idx == "last":
-                selection_idx = -1
-        # Extracting the data from the results
-        time_axis = []
-        points = {varname: [] for varname in variables}
-        titles = []
-        for result in results:
-            if isinstance(selection_idx,str):
-                # Given multiple event types we order them temporally 
-                events = self.sort_events_in_t(result["experiment"],event_type,interval_choice)
-                if len(events)> 1: # I assume if you have multiple events you want one plot per experiment
-                    # Another assumption, the time axis is shared among different variables
-                    time_axis.append([events[i][interval_choice] - 1 - multiplier*event_idx for i in range(len(events))])
-                    dt = result["experiment"].dt
-                    for varname in variables:
-                        points[varname].append([result[varname][int(t/dt)] for t in time_axis[-1]])
-                    titles.append(result["model"] + ":" + result["name"])
-                else:
-                    time_axis.append(events[0][interval_choice]-1-multiplier*event_idx)
-                    for varname in variables:
-                        points[varname].append(result[varname][int(time_axis[-1]/dt)])
-                    titles.append(result["model"] + ":" + result["name"])
-                x_is_time = True
-            else:
-                # Assuming you just want the experiments to be numbered
-                # TODO: could give an option to specify what to put on the time axis
-                time_axis.append(len(time_axis))
-                x_is_time = False
-                for varname in variables:
-                    points[varname].append(result[varname][selection_idx])
-                titles.append(f"{result['model']}:{result['name']}")
-        
-        n_plots = 1 if not isinstance(points[variables[0]][0],list) else len(results)
-        print(f"Making {n_plots} plots")
-        # TODO this is not optimal, also, currently not supporting multiple x_data arrays
-        if x_data is not None: # Override the time axis, but only if they're compatible
-            if n_plots> 1:
-                for idx,time in enumerate(time_axis):
-                    if len(x_data) != len(time):
-                        warn("The x_data you gave is not compatible with the number of points in the plot, "
-                        "currently not using it.")
-                    else:
-                        time_axis[idx] = x_data
-                        x_is_time = False
-            else: 
-                if len(x_data) != len(time_axis):
-                    warn("The x_data you gave is not compatible with the number of points in the plot, "
-                        "currently not using it.")
-                else:
-                    time_axis = x_data
-                    x_is_time = False
-        if reference_values is not None:
-            # Making sure the formatting is done correctly
-            if isinstance(reference_values,list):
-                if len(reference_values) % n_plots == 0 and n_plots > 1:
-                    if not isinstance(reference_values[0],list):
-                        reference_values = [[reference_values[i]]for i in range(len(reference_values))]
-                else:
-                    if isinstance(reference_values[0],list) or isinstance(reference_values[0],np.ndarray):
-                        raise ValueError("The reference values you gave are incompatible with the number of plots, make sure you either give"
-                        " a list of values (or single value) for each plot, or a list of values that should be shared among plots.")
-                    else:
-                        reference_values = [reference_values for k in range(n_plots)]
-            else:
-                reference_values = [[reference_values] for k in range(n_plots)]
-        if reference_data is not None:
-            if n_plots > 1:
-                raise ValueError("Currently only one dimensional arrays of reference data are supported, so this will be used for all plots.")
-            assert len(reference_data) == len(time_axis)
-        # Convert time to minutes
-        if x_is_time:
-            time_unit = get_time_unit_in_seconds(kwargs.get("time_unit","m"))
-            if n_plots> 1:
-                time_axis = [[int(t/time_unit) for t in time_axis[i]] for i in range(len(time_axis))]
-            else:
-                time_axis = [int(t/time_unit) for t in time_axis]
-
-        plot_cols = kwargs.get('n_cols',3)
-        figsize = kwargs.get('figsize',(
-                            (min(n_plots*10,20)),
-                            min(ceil(n_plots/plot_cols)*6,104)))
-        fontsize = kwargs.get('fontsize',12)
-        fig = plt.figure(figsize=figsize)
-        for idx in range(n_plots):
+        if multi_plot != 1: 
+            assert len(results) == multi_plot
             if reference_data is not None:
-                t_axis = time_axis
-                plt.plot(t_axis,reference_data,label = kwargs.get("ref_data_label","ref"))
-            plt.subplot(ceil(n_plots/plot_cols),plot_cols if n_plots >= plot_cols else n_plots,idx+1)
-            for varname in variables:
-                t_axis = time_axis[idx] if n_plots > 1 else time_axis
-                p = points[varname][idx] if n_plots >1 else points[varname]
-                plt.plot(t_axis,p,label = varname, color = self.color_coding[varname])
+                assert len(reference_data) == multi_plot
+                multi_data = reference_data
+            else:
+                multi_data = [None for k in range(multi_plot)]
             if reference_values is not None:
-                default_labels = [f"ref {j}" for j in range(len(reference_values))]
-                for i,val in enumerate(reference_values[idx]):
-                    l = kwargs.get('ref_labels',default_labels)[i]
-                    plt.plot([time_axis[0],time_axis[-1]],[val,val],label = l)
-            plt.xlabel("Time in m" if x_is_time else kwargs.get("x_label","iterations"))
-            plt.ylabel(kwargs.get('ylabel','% of baseline'))
-            plt.legend()
-            plt.title(titles[idx]) 
-        if save:
-            makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
-            plt.savefig(self.prefs.plot_directory + filename)
+                assert len(reference_values) == multi_plot
+                multi_values = reference_values
+            else:
+                multi_values = [None for k in range(multi_plot)]
+            multi_results = results
+        else:
+            multi_results = [results]
+            multi_data = [reference_data]
+            multi_values = [reference_values]
+        for multi_plot_idx,[results,reference_data,reference_values] in enumerate(zip(multi_results,multi_data,multi_values)):
+            if not isinstance(variables,list):
+                variables = [variables]
+            for result in results:
+                for var in variables:
+                    if not var in result.keys():
+                        raise KeyError("The name of the variable to plot should match the one given in the results dictionary! "
+                        f"But in the result named {result['name']}, the selected variable is not present.")
+            if not (isinstance(selection_idx,str) or isinstance(selection_idx,int)):
+                raise ValueError("The selection index should be given as a string or an int!")
+
+            if isinstance(selection_idx,str):
+                if not selection_idx in self.prefs.point_selection:
+                    raise NotImplementedError(f"The selection index {selection_idx} is currently not supported. "
+                    f"The supported string indices are: {self.prefs.point_selection}")
+                # These quantities are useful later when looking for the points to plot
+                multiplier = 1 if not "last" in selection_idx else 0
+                interval_choice = -1 if "after" in selection_idx else 0
+                # This is the only case we can cover here without looking at the results
+                if selection_idx == "last":
+                    selection_idx = -1
+            # Extracting the data from the results
+            time_axis = []
+            points = {varname: [] for varname in variables}
+            titles = []
+            for result in results:
+                dt = result["experiment"].dt
+                if isinstance(selection_idx,str):
+                    # Given multiple event types we order them temporally 
+                    events = self.sort_events_in_t(result["experiment"],event_type,interval_choice)
+                    if len(events)> 1: # I assume if you have multiple events you want one plot per experiment
+                        # Another assumption, the time axis is shared among different variables
+                        time_axis.append([events[i][interval_choice] - 1 - multiplier*event_idx for i in range(len(events))])
+                        dt = result["experiment"].dt
+                        for varname in variables:
+                            points[varname].append([result[varname][int(t/dt)] for t in time_axis[-1]])
+                        titles.append(result["model"] + ":" + result["experiment"].title)
+                    else:
+                        time_axis.append(events[0][interval_choice]-1-multiplier*event_idx)
+                        for varname in variables:
+                            points[varname].append(result[varname][int(time_axis[-1]/dt)])
+                        titles.append(result["model"] + ":" + result["experiment"].title)
+                    x_is_time = True
+                else:
+                    # Assuming you just want the experiments to be numbered
+                    # TODO: could give an option to specify what to put on the time axis
+                    time_axis.append(len(time_axis))
+                    x_is_time = False
+                    for varname in variables:
+                        points[varname].append(result[varname][selection_idx])
+                    titles.append(f"{result['model']}:{kwargs.get('title', result['experiment'].title)}")
+            # This fixes a bug related to plotting only one experiment
+            if len(time_axis) == 1:
+                for varname in variables:
+                    points[varname] = points[varname].pop(0)
+                time_axis = time_axis.pop(0)
+            
+            n_plots = 1 if not isinstance(points[variables[0]][0],list) else len(results)
+            print(f"Making {n_plots} plots")
+            # TODO this is not optimal, also, currently not supporting multiple x_data arrays
+            if x_data is not None: # Override the time axis, but only if they're compatible
+                if n_plots> 1:
+                    for idx,time in enumerate(time_axis):
+                        if len(x_data) != len(time):
+                            warn(f"The x_data you gave is not compatible with the number of points in the plot, "
+                            f"currently not using it. given_data {len(x_data)} != {len(time)} selected points")
+                        else:
+                            time_axis[idx] = x_data
+                            x_is_time = False
+                else: 
+                    if len(x_data) != len(time_axis):
+                        warn("The x_data you gave is not compatible with the number of points in the plot, "
+                            f"currently not using it. given_data {len(x_data)} != {len(time_axis)} selected points")
+                    else:
+                        time_axis = x_data
+                        x_is_time = False
+            if reference_values is not None:
+                # Making sure the formatting is done correctly
+                if isinstance(reference_values,list):
+                    if len(reference_values) % n_plots == 0 and n_plots > 1:
+                        if not isinstance(reference_values[0],list):
+                            reference_values = [[reference_values[i]]for i in range(len(reference_values))]
+                    else:
+                        if isinstance(reference_values[0],list) or isinstance(reference_values[0],np.ndarray):
+                            raise ValueError("The reference values you gave are incompatible with the number of plots, make sure you either give"
+                            " a list of values (or single value) for each plot, or a list of values that should be shared among plots.")
+                        else:
+                            reference_values = [reference_values for k in range(n_plots)]
+                else:
+                    reference_values = [[reference_values] for k in range(n_plots)]
+            if reference_data is not None:
+                if n_plots > 1:
+                    if len(reference_data) != n_plots:
+                        raise ValueError("The reference data is not compatible with the requested plots.")
+                    assert all([len(reference_data[i]) == len(time_axis[i]) for i in range(len(time_axis))])
+                else:
+                    assert len(reference_data) == len(time_axis)
+                    reference_data = [reference_data]
+            # Convert time to minutes
+            if x_is_time:
+                time_unit = get_time_unit_in_seconds(kwargs.get("time_unit","m"))
+                if n_plots> 1:
+                    time_axis = [[int(t/time_unit) for t in time_axis[i]] for i in range(len(time_axis))]
+                else:
+                    time_axis = [int(t/time_unit) for t in time_axis]
+            if multi_plot_idx == 0:
+                plot_cols = kwargs.get('n_cols',min(n_plots,4))*multi_plot
+                plot_rows = ceil(n_plots/plot_cols)
+                use_legend = kwargs.get("use_legend", True)
+                separate_legend = kwargs.get('separate_legend', False)
+                figsize = kwargs.get('figsize',self.prefs.determine_figsize(plot_rows,plot_cols,use_legend,separate_legend))
+                print("Figsize",figsize)
+                fontsize = kwargs.get('fontsize',12)
+                plt.rcParams['font.size'] = fontsize
+                fig = plt.figure(figsize=figsize)
+                ax0 = fig.add_subplot(1,multi_plot,1)
+                if multi_plot == 1:
+                    ax0.set_axis_off()
+            else:
+                ax = fig.add_subplot(1, multi_plot, multi_plot_idx+1,sharey = ax0)
+            axes = []
+            for idx in range(n_plots):
+                if reference_data is not None:
+                    t_axis = time_axis[idx] if n_plots > 1 else time_axis
+                    labels = kwargs.get("ref_data_labels","ref")
+                    label = labels[idx] if n_plots > 1 else labels
+                    plt.plot(t_axis,reference_data[idx],label = label,lw = 3)
+                if n_plots != 1:
+                    axes.append(fig.add_subplot(ceil(n_plots/plot_cols),plot_cols if n_plots >= plot_cols else n_plots,idx+1,
+                    sharey =axes[0] if idx > 0 else None))
+                for varname in variables:
+                    t_axis = time_axis[idx] if n_plots > 1 else time_axis
+                    p = points[varname][idx] if n_plots >1 else points[varname]
+                    var_label = self.determine_label(varname)
+                    plot_style = kwargs.get('plot_style','line')
+                    if plot_style == 'line':
+                        plt.plot(t_axis,p,label = var_label, color = self.color_coding[varname],lw = 3)
+                    else:
+                        plt.plot(t_axis,p,label = var_label,ls = None,marker = 'o',color = self.color_coding[varname])
+                if reference_values is not None:
+                    default_labels = [f"ref {j}" for j in range(len(reference_values))]
+                    for i,val in enumerate(reference_values[idx]):
+                        l = kwargs.get('ref_labels',default_labels)[i]
+                        plt.plot([time_axis[0],time_axis[-1]],[val,val],label = l,ls = "--",lw = 3)
+                plt.xlabel(kwargs.get("xlabel","iterations"))
+                plt.ylabel(kwargs.get('ylabel','ratio of baseline'))
+                plt.title(titles[idx])
+                yticks = plt.yticks()[0]
+                plt.plot([0,0],[0.6,2.0],lw = 3,ls = "--", c = "brown",label = r"$LFS$")
+                # if multi_plot_idx != 1:
+                #     plt.plot([45,45],[1.5,3.1],lw = 3,ls = "--", c = "brown",label = r"$\phi(t)= 1$")
+                # else:
+                #     plt.plot([45,45],[1.5,3.1],lw = 3,ls = "--", c = "brown",label = r"$\phi(t)= 1$") 
+                # plt.scatter(time_axis[2],points["Vpsd"][2], label = "5 min", c = "brown", lw = 3)
+                # plt.scatter(time_axis[7],points["Vpsd"][7], label = "15 min", c = "teal", lw = 3)
+                # plt.xlim(right = 47)
+        if use_legend:
+            if not separate_legend:
+                plt.legend(bbox_to_anchor = (1.0,0), loc = "lower left")
+                plt.tight_layout()
+            else:
+                self.plot_separate_legend(axis = ax,filename = filename)
+        makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
+        fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
     
+    def determine_label(self,varname):
+        if not hasattr(self.model,"labels") or not varname in self.model.labels:
+            return varname
+        return self.model.labels[varname]
+    
+    def determine_varname(self,label):
+        if not hasattr(self.model,"labels") or not label in self.model.labels.values():
+            return label
+        return list(self.model.labels.keys())[list(self.model.labels.values()).index(label)]
+
+
     def sort_events_in_t(self,exp,event_type,start_end):
         """
         Sorts a list of events from an Experiment with respect to their 

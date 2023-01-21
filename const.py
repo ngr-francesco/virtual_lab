@@ -41,13 +41,26 @@ CONSTANTS = {
     # Nucleation birth-death process dynamics
     "g_mul_LTD" : 1/10, 
     "m_mul_LTD" : 10,
-    "g_mul_LTP" : 25, 
-    "m_mul_LTP" : 1/20,
+    "g_mul_LTP" : 27, 
+    "m_mul_LTP" : 1/15,
     "gamma_0" : 0.02, # For now just making sure nothing explodes
     "mu_0" : 0.5,
     "nf_0" : 0.04,
     "nf_LTP": 15,
-    "nf_LTD": 0
+    "nf_LTD": 0.,
+    ## Duration constants
+    # Durations
+    "STET" : 120,
+    "WTET" : 60,
+    "PROTEIN" : 3600,
+    "X_STET" : 120,
+    "X_WTET" : 60,
+    "X_LFS" : 900,
+    "X_WLFS": 600,
+    "LFS" : 900,
+    "WLFS": 600,
+    "P_ONSET" : 2700, # Bosch 2014 -> The PSD doesn't change in the first 45 mins
+    "E_ONSET" : 420 # 600 # This should be between 2-7 mins
 }
 
 
@@ -63,7 +76,7 @@ EXPERIMENTAL_DATA = {
     "info": """The times are always given in minutes, relative to stimulus, measuring distance between each sample. 
                 Volume changes are measured in change relative to initial volume""",
     # Matsuzaki: 20 m = 6.5 mm, 50% = 5.12 mm (reference 100%)
-    "sLTP_Matsuzaki": {"deltax": 20/6.5*np.array([-1.39,1.86,1.76,1.62,1.53,1.66,1.75, 2.4,3.28,3.27, 3.4,3.28, 3.17,3.27]),
+    "Matsuzaki 2004": {"deltax": 20/6.5*np.array([-1.39,1.86,1.76,1.62,1.53,1.66,1.75, 2.4,3.28,3.27, 3.4,3.28, 3.17,3.27]),
                         "y": .5/5.12*np.array([0.2,20.59,8.74,6.45,5.92,6.03,5.00,4.04,3.76,3.83,3.24,4.15,4.36,3.35])+1},
     # Lee: first 15 points: 1m = 9.7 mm, then 5 m = 5.88 mm, 100% = 4.06
     #"sLTP_Lee": {"deltax": deltax_lee,
@@ -72,7 +85,7 @@ EXPERIMENTAL_DATA = {
     #"sLTD_Zhou": { "deltax": np.array([0,15,15,15,15]),
     #                "y": 1-0.25/5.4*np.array([0,3.8,5.8,7.2,6.8])},
     # Kasai Noguchi: 20m = 11 mm, 25% = 8.1 mm
-    "sLTD_Kasai_Noguchi": { "deltax": 20/11*np.array([0,5.7,5.5,5.4,5.7,6.0,5.3,11.6]),
+    "Kasai Noguchi 2015": { "deltax": 20/11*np.array([0,5.7,5.5,5.4,5.7,6.0,5.3,11.6]),
                             "y": 1- .25/8.1*np.array([0,4.4,6.3,8.7,8.6,7.9,8.8,8.6])},
     "renorm_var" : "V_tot",
     "time_unit" : "min"

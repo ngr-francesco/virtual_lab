@@ -1,4 +1,4 @@
-![Virtual Lab logo](logo/1@2x.png)
+![Virtual Lab logo](logo/1@2x.png){width = 357 height = 166}
 # virtual_lab
 
 Virtual Lab is a simulation manager in which the user can define 3 main sets of objects:
@@ -12,6 +12,6 @@ This, hopefully results in more clean and organized scripts which will save you 
 Examples of how to use these classes are shown in the virtual_lab.examples folder as jupyter notebooks.
 
 Dependencies:
-python 3.7
-numpy
-matplotlib
+- python 3.7
+- numpy
+- matplotlib

@@ -1,5 +1,5 @@
-![Virtual Lab logo](logo/1@2x.png){width = 357 height = 166}
-# virtual_lab
+<img src="logo/@1x2.png" alt="Virtual Lab logo" width="300"/>
+# VIRTUAL LAB
 
 Virtual Lab is a simulation manager in which the user can define 3 main sets of objects:
 - `Experiment` objects which contain the details of the experiments you want to run

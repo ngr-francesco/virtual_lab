@@ -1,4 +1,4 @@
-<img src="logo/1@x2.png" alt="Virtual Lab logo" width="300"/>
+<img src="logo/1@2x.png" alt="Virtual Lab logo" width="300"/>
 # VIRTUAL LAB
 
 Virtual Lab is a simulation manager in which the user can define 3 main sets of objects:

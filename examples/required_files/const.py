@@ -7,7 +7,6 @@ X_WTET = 60
 X_LFS = 900
 LFS = 900
 P_ONSET = 2700 # Bosch 2014 -> The PSD doesn't change in the first 45 mins
-E_ONSET = 420 # 600 # This should be between 2-7 mins
 
 CONSTANTS = {
     "dt" : 1,
@@ -34,7 +33,7 @@ CONSTANTS = {
     # separate PSD95 and its volume
     # Normally (dynPSD==0), PSD_molecule & volume is acquired when Vs+Vd is enlarged & when protein is synthesized and decays otherwise
     # If dynPSD==1, only V_psd grows when Vd and Vs are unbalanced and otherwise decays to PSD95-molecule-defined volume
-    "dynamicPSD" : 0, # use extra dynamics for PSD
+    "dynamicPSD" : 0, # use event dynamics for PSD
     # only needed for independent PSD dynamics
     "tau_PSD_str"   : 360,   # PSD structure expansion by dynamic actin (was 3600)
     "tau_PSD_reorg" : 900,  # PSD reorganizes into compact form

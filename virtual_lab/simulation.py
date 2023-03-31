@@ -12,16 +12,10 @@ import json
 from virtual_lab.experiments import Experiments, Experiment
 from virtual_lab.settings import prefs
 from virtual_lab.model import Model
-from matplotlib.cm import Accent,tab10
-from matplotlib.colors import TABLEAU_COLORS
 from virtual_lab.utils import select_unique_handles_and_labels, get_time_unit_in_seconds
-
-
-# TODO: the current color scheme is not applicable in the case in which you want to compare models
-# on the same plot (they would have the same color coding). 
-# Not a big problem since I think we never actually plot different models in the same plot (should be done outside of the Simulation class by the user)
-# But could be a nice additional feature, to just say Sim.compare_model_variables([var1,var2]) and get a nice plot.
-
+from virtual_lab.logger import get_logger, LogLevel
+from virtual_lab.colors import ColorCoding
+    
 class Simulation:
     
     def __init__(self, model = None, **kwargs):
@@ -32,7 +26,14 @@ class Simulation:
             constants: dict, optional
                 The constants used during the experiments. Defaults to the 
                 constants that were defined in the model
-    """
+        """
+
+        # Set up the management objects
+        self.prefs = kwargs.get("settings",prefs)
+        self.logger = get_logger("Simulation")
+        self.color_coding = ColorCoding()
+
+        # Set up the simulation-related attributes
         if model is not None:
             self.model = model
             self.models = {model.name: model}
@@ -40,76 +41,96 @@ class Simulation:
             self.models = {}
             print("Initializing a simulation without a given model. A model should be added before running any experiment"
             " by calling Simulation.add_model()")
-        self.model_results = {}
-        self.prefs = kwargs.get("settings",prefs)
-        load_prefs = kwargs.get("load_preferences",True)
-        self.color_coding = kwargs.get("colors", {})
-        # This should be made so you can plot more things in case it's needed..
-        self.var_colors = tab10(range(10)).tolist()
-        self.extra_colors = Accent(range(7)).tolist()
-        self.additional_var_colors = list(TABLEAU_COLORS.keys())
         self._ordered_quantities = []
+        self.model_results = {}
+        load_prefs = kwargs.get("load_preferences",True)
         if load_prefs:
-            self.load_user_prefs()
-        # This is not optimal, should be taken care of in another place.
-        
+            self.load_user_prefs()    
     
     def save_user_prefs(self):
         makedirs(self.prefs.user_prefs_directory[:-1],exist_ok=True)
+        color_coding = self.color_coding.color_coding
+        var_colors = self.color_coding.available_colors["var"]
+        event_colors = self.color_coding.available_colors["event"]
         dict_to_save = {
-            "color_coding": self.color_coding,
-            "var_colors": self.var_colors,
-            "extra_colors": self.extra_colors,
+            "color_coding": color_coding,
+            "var": var_colors,
+            "event": event_colors,
             "_ordered_quantities": self._ordered_quantities
         }
+        self.logger.debug(f"Saving user preferences to {self.prefs.user_prefs_directory+'user_prefs.json'}")
         with open(self.prefs.user_prefs_directory+"user_prefs.json","w+") as file:
-            json.dump(dict_to_save,file)
+            json.dump(dict_to_save,file, indent = 4)
     
     def load_user_prefs(self):
+        """
+        Load user preferences from a json file.
+        """
         try:
+            self.logger.debug(f"Loading user preferences from {self.prefs.user_prefs_directory+'user_prefs.json'}")
             with open(self.prefs.user_prefs_directory+"user_prefs.json","r") as file:
                 prefs = json.load(file)
-            for var in prefs["color_coding"]:
-                tot_cols = self.var_colors
-                tot_cols.append(self.extra_colors)
-                if not prefs["color_coding"][var] in tot_cols:
-                    self.reset_available_colors(prefs["color_coding"])
-                    prefs.pop("var_colors")
-                    prefs.pop("extra_colors")
-                    break
-            for varname in prefs:
-                setattr(self,varname,prefs[varname])      
+            self._ordered_quantities = prefs["_ordered_quantities"]
+            self.color_coding.color_coding = prefs["color_coding"]
+            self.color_coding.available_colors["var"] = prefs["var"]
+            self.color_coding.available_colors["event"] = prefs["event"]
+            self.logger.debug(f"Loaded user preferences: {prefs}")    
         except FileNotFoundError:
-            pass
-    
-    def reset_available_colors(self,color_coding):
-        print("Resetting variable colors...")
-        for col in color_coding.values():
-            if col in self.var_colors:
-                self.var_colors.pop(self.var_colors.index(col))
-            if col in self.extra_colors:
-                self.extra_colors.pop(self.extra_colors.index(col))
+            self.logger.debug("No user preferences file found, using default preferences.")
 
     def add_model(self,model, switching = True):
-        self.models[model.name] = model
-        if switching:
-            print(f"Switching to model {model.name}")
-            self.model = model
-        # Add a color coding for this model's variables
-        
-        self.add_colors(model.variables.varnames)
+        """
+        Add a model to the simulation.
+        """
+        if isinstance(model,Model):
+            self.models[model.name] = model
+            if switching:
+                self.logger.info(f"Switching to model {model.name}")
+                self.model = model
+            # Add a color coding for this model's variables
+            self._add_colors(model.variables.varnames)
+        else:
+            raise TypeError(f"Model must be of type Model, not {type(model)}")
     
-    def add_colors(self,varnames, extra = False, additional = False):
-        for var in varnames:
-            if not var in self.color_coding:
-                # Just linearly go through the list of available colors
-                if extra:
-                    self.color_coding[var] = self.extra_colors.pop(0)
-                elif additional:
-                    self.color_coding[var] = self.additional_var_colors.pop(0)
-                else:
-                    self.color_coding[var] = self.var_colors.pop(0)
+    def _add_colors(self,varnames, var_type = "var"):
+        """
+        Add colors to the color coding for the given variables.
+        Parameters:
+        -----------
+            varnames: list
+                The variables for which to add colors
+            event: bool, optional   
+                If True, the colors will be added to the event colors.
+                If False, the colors will be added to the default colors.   
+            additional: bool, optional
+                If True, the colors will be added to the additional colors.
+                If False, the colors will be added to the default colors.  
+        """
+        self.color_coding.add_default_colors(varnames, var_type=var_type) 
         self.save_user_prefs()
+    
+    def set_variable_color(self,var,color):
+        """
+        Set the color for the given variable.
+        Parameters:
+        -----------
+            var: str
+                The variable for which to set the color
+            color: str
+                The color to set
+        """
+        self.color_coding.set_var_color(var,color)
+        self.save_user_prefs()
+    
+    def get_variable_color(self,var):
+        """
+        Get the color for the given variable.
+        Parameters:
+        -----------
+            var: str
+                The variable for which to get the color
+        """
+        return self.color_coding[var]
 
     def switch_model(self,model):
         if isinstance(model,Model):
@@ -246,6 +267,7 @@ class Simulation:
         Initialize the system in its stationary state (if there is one). Then perturb one of the variables to 
         measure the relaxation process. Particularly useful for models which cannot be integrated analytically.
         """
+        pass
         
     
     def reduce_data(self,values, start,stop,step=1):
@@ -382,7 +404,6 @@ class Simulation:
 
                 # Plotting starts here
                 reference_axis = int(plot_idx/cols)*cols
-                print(reference_axis)
                 axes.append(fig.add_subplot(rows,cols,plot_idx+start_index,sharey=axes[reference_axis] if plot_idx%cols!=0 else None))
                 if use_title:
                     plt.title(model_name + ": " + result["name"])
@@ -396,15 +417,14 @@ class Simulation:
                             ls = ':'
                         try:
                             col = self.color_coding[name]
-                        except:
-                            self.add_colors([name],additional = True)
+                        except KeyError:
+                            self._add_colors([name])
                             col = self.color_coding[name]
                         var_label = self.determine_label(name)
                         if plot_std:
                             plt.plot(time_axis, values["mean_" + name], label = var_label, lw = lw,color = col,ls = ls)
                             plt.fill_between(time_axis,values["mean_" + name] - values["std_"+name],
                                                     values["mean_" + name]+ values["std_" + name],alpha = 0.3,color = col)
-                            tmp = min(values['mean_'+name]-values['std_'+name])
                         else:
                             plt.plot(time_axis,values[name],label = var_label,lw = lw, color = col,ls = ls)
                 if exp.experimental_data is not None:
@@ -467,6 +487,7 @@ class Simulation:
         axl.legend(plot_handles,plot_labels, loc="center", bbox_to_anchor=(0.5, 0.5),frameon = True,
                     edgecolor = "k", ncol = ncols)
         figl.tight_layout(pad = 0)
+        makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
         figl.savefig(self.prefs.plot_directory + "legend_" + filename, transparent= True,
                     bbox_inches='tight',pad_inches = 0, dpi = 200)
     
@@ -480,7 +501,7 @@ class Simulation:
         plot_dict = data_dict.copy()
         plot_dict.pop("renorm_var")
         plot_dict.pop("time_unit")
-        self.add_colors(plot_dict.keys())
+        self._add_colors(plot_dict.keys())
         for data in plot_dict:
             col = self.color_coding[data]
             # TODO: This is also highly incorrect and should happen in other places
@@ -501,7 +522,7 @@ class Simulation:
         positions_range = value_range/5
         offset = value_range/10
         positions = np.arange(min_value-positions_range-offset,min_value-offset,positions_range/len(sorted_quantities))
-        self.add_colors(list(quantities.keys()),extra= True)
+        self._add_colors(list(quantities.keys()),var_type = "event")
         # Make a list of the quantities needed for the model, we only want to plot those.
         dep = list(self.models[model_name].quantity_dependencies().values())
         # Flatten the list of the keys contained in the values of the dictionary returned by quantity_dependencies()
@@ -578,16 +599,16 @@ class Simulation:
             if stochastic_styling == "mixed":
                 stochastic_styling = "mean_traces"
             plot_std = False
-            colors = [col for col in self.var_colors]
             min_values = []
             for idx, result in enumerate(results):
                 exp = result["experiment"]
                 time_axis,timescale,start,stop,_ = self._get_time_quantities(exp,**kwargs)
                 values = self.reduce_data(result,start,stop,kwargs.get("step",1))
+                self.color_coding.reset_color_cycle()
                 min_values.append(self.get_min_value(values,variables = variables))
                 for var in variables:
                     if hasattr(self.models[result["model"]].variables,var) and var in result.keys():
-                        col = colors.pop(0)
+                        col = self.color_coding.get_next_color("var")
                         # Check if we're plotting a deterministic or stochastic variable
                         try: 
                             len(result[var][0])
@@ -607,10 +628,6 @@ class Simulation:
                                     values[var] = values[var]/values[var][0]*ref_value
                             plot_std = False
                         if not plot_std:
-                            if "traces" in stochastic_styling:
-                                # TODO: this is temporary
-                                colors.insert(0,col)
-                                col = 'darkslateblue'
                             plt.plot(time_axis, values[var],color = col,label = "deterministic")
                         else:
                             if "traces" in stochastic_styling:
@@ -618,13 +635,9 @@ class Simulation:
                                     trace_n = int(stochastic_styling[-1])
                                 except:
                                     trace_n = len(values[var])
-                                if trace_n > len(self.extra_colors):
-                                    trace_n = len(self.extra_colors)
-                                    warn(f"The requested number of traces is larger than the maximum of {len(self.extra_colors)}, "
-                                    "I will only plot the first ones.")
                                 for k in range(trace_n):
                                     # Choose from a different list
-                                    trace_col = self.extra_colors[k]
+                                    trace_col = self.color_coding.get_next_color()
                                     plt.plot(time_axis, values[var][k],color = trace_col, alpha = 0.7, label = "trace")
                             if "mean" in stochastic_styling:
                                 std = "std_" + var 
@@ -800,7 +813,7 @@ class Simulation:
                 # This is the only case we can cover here without looking at the results
                 if selection_idx == "last":
                     selection_idx = -1
-            # Extracting the data from the results
+            # eventcting the data from the results
             time_axis = []
             points = {varname: [] for varname in variables}
             titles = []
@@ -916,6 +929,13 @@ class Simulation:
                     plot_style = kwargs.get('plot_style','line')
                     if plot_style == 'line':
                         plt.plot(t_axis,p,label = var_label, color = self.color_coding[varname],lw = 3)
+                        # # TODO Delete this!!
+                        # if varname == "V_tot":
+                        #     plt.plot([0,0],[0.6,2],lw = 3,ls = "--", c = "brown",label = r"$LFS$")
+                        # l1 = r"15'" if varname == "V_tot" else None
+                        # l2 = r"45'" if varname == "V_tot" else None
+                        # plt.scatter(t_axis[12],p[12], lw = 2, marker = 'o',c = "teal", label = l1,zorder = 10)
+                        # plt.scatter(t_axis[18],p[18], lw = 2, marker = 'o',c = "forestgreen", label = l2, zorder = 10)
                     else:
                         plt.plot(t_axis,p,label = var_label,ls = None,marker = 'o',color = self.color_coding[varname])
                 if reference_values is not None:
@@ -926,12 +946,14 @@ class Simulation:
                 plt.xlabel(kwargs.get("xlabel","iterations"))
                 plt.ylabel(kwargs.get('ylabel','ratio of baseline'))
                 plt.title(titles[idx])
-                yticks = plt.yticks()[0]
-                plt.plot([0,0],[0.6,2.0],lw = 3,ls = "--", c = "brown",label = r"$LFS$")
+                # yticks = plt.yticks()[0]
+                #TODO delete!
                 # if multi_plot_idx != 1:
-                #     plt.plot([45,45],[1.5,3.1],lw = 3,ls = "--", c = "brown",label = r"$\phi(t)= 1$")
+                #     time = 15 if "EC" in titles[idx] else 45
+                #     plt.plot([time,time],[1.5,3.1],lw = 3,ls = "--", c = "brown",label = r"$\phi(t)= 1$")
                 # else:
-                #     plt.plot([45,45],[1.5,3.1],lw = 3,ls = "--", c = "brown",label = r"$\phi(t)= 1$") 
+                #     time = 15 if "EC" in titles[idx] else 45
+                #     plt.plot([time,time],[1.5,3.1],lw = 3,ls = "--", c = "brown",label = r"$\phi(t)= 1$") 
                 # plt.scatter(time_axis[2],points["Vpsd"][2], label = "5 min", c = "brown", lw = 3)
                 # plt.scatter(time_axis[7],points["Vpsd"][7], label = "15 min", c = "teal", lw = 3)
                 # plt.xlim(right = 47)

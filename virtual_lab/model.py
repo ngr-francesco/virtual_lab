@@ -1,6 +1,5 @@
 from distutils.log import warn
 import numpy as np
-from virtual_lab.const import *
 from virtual_lab.experiments import Experiment
 # TODO: Maybe it's possible to avoid having to write every time self.variables.variable and you could
 # set a proxy reference to that variable where you could just say self.variable
@@ -85,7 +84,7 @@ class Variables:
 
 
 class Model:
-    def __init__(self,name:str, model_variables:dict, const:dict = CONSTANTS, labels = None, record = True):
+    def __init__(self,name:str, model_variables:dict, const:dict = {}, labels = None, record = True):
         # TODO: Implement a dictionary system for stochastic variables, right now it only works for a single one!
         self.const = const
         self.name = name

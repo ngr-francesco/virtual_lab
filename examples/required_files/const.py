@@ -16,6 +16,8 @@ CONSTANTS = {
     "k_b_0" : 1/3/600, # CaMKII active (unbound) for about 1 min after LTP (Lee et al 2009)
     "k_u_1" : 1/60, # k_u_1 = 1/90
     "k_b_1" : 1/600, # k_b_1 = 1/30
+    "t_m_0": 1,
+    "t_m_1": 3,
     # Initial PSD volume
     "PSD_0" : 1, 
     # Actin foci

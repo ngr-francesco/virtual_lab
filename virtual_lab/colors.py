@@ -105,7 +105,8 @@ class ColorCoding:
             self.check_if_run_out_of_colors()
         
         if len(changed_color_coding):
-            msg = f"""Updated color coding to account for {var_type}s: {changed_color_coding}:\n{self.color_coding}"""          
+            color_coding_to_print = '\n'.join(self.color_coding)
+            msg = f"""Updated color coding to account for {var_type}s: {changed_color_coding}:\n{color_coding_to_print}"""          
             self.logger.diagnostic(msg)
     
     def refresh_available_colors(self):

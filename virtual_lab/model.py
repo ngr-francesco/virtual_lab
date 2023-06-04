@@ -24,6 +24,9 @@ class Variables:
     
     def __iter__(self):
         return iter([var for var in self.varnames])
+    
+    def __len__(self):
+        return len(self.varnames)
 
     @property
     def is_recording(self):
@@ -185,6 +188,9 @@ class Model:
                     continue
                 _const = getattr(self,name)
                 for s in c_values.keys():
+                    # If the experiment doesn't involve this quantity, we skip it
+                    if not hasattr(exp,s):
+                        continue
                     for ton,toff in getattr(exp,s):
                         _const[int(ton/exp.dt):int(toff/exp.dt)] = c_values[s]
                     setattr(self,name,_const)

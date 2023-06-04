@@ -9,7 +9,8 @@ class Preferences:
     default_constant_directory = "const"
     _constants_directory = "const"
     default_log_level = LogLevel.CRITICAL
-    color_presets = {"var": chain(Accent.colors,tab10.colors), "event": list(TABLEAU_COLORS.values())}
+    color_presets = {"var": list(chain(Accent.colors,tab10.colors)), "event": list(TABLEAU_COLORS.values())}
+    exp_T = 1000
         
 
     def set_constants_directory(self, path):

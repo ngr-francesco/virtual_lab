@@ -2,6 +2,7 @@
 import json
 from virtual_lab.experiments import *
 from examples.required_files.const import *
+from virtual_lab.settings import prefs
 with open("experimental_data.json","r") as file:
     exp_data = json.load(file)
 
@@ -16,11 +17,15 @@ data_LTD = {}
 names = [name for name in exp_data if "Kasai" in name]
 names.append("renorm_var")
 names.append("time_unit")
+T = 2*3600
+
 
 for name in names:
     data_LTD[name] = exp_data[name]
 from virtual_lab.model import Model
 def create_experiments(model:Model, **kwargs):
+    # Set the global time duration for the experiments
+    prefs.exp_T = T
     return_Base = kwargs.get("Basic",True)
     return_STC = kwargs.get("STC",True)
     return_TR = kwargs.get("TR",True)
@@ -41,10 +46,10 @@ def create_experiments(model:Model, **kwargs):
     P_ONSET = model.P_ONSET
     BasicExperiments = Experiments()
     NO_STIMULI = Experiment("NO_STIMULI",
-                    {"protein" : [], 
+                    {"protein" : [[0,100*3600]], 
                     "crosslink": [], 
                     "stim": [], 
-                    "LFS": []},T = 10*3600)
+                    "LFS": []},T = 100*3600)
     BasicExperiments.add(NO_STIMULI)
     ONLY_XLINKERS = Experiment("ONLY_XLINKERS",
                     {"protein" : [], 
@@ -63,7 +68,7 @@ def create_experiments(model:Model, **kwargs):
                         "LFS": [], 
                         "crosslink": [[300,X_STET]], 
                         "protein" : [[300+P_ONSET,PROTEIN]] },
-                        exp_data = data_LTP)
+                        exp_data = data_LTP, T= T)
 
     BasicExperiments.add(S_TET)
     LTP_X2 = Experiment("LTP_X2",
@@ -83,14 +88,14 @@ def create_experiments(model:Model, **kwargs):
                                     {"stim": [[300, STET],[300 + STET + 100, STET]], 
                                         "LFS": [], 
                                         "crosslink": [[300, X_STET],[300 + X_STET + 100, X_STET]], 
-                                        "protein" : [[300+P_ONSET, PROTEIN]] })
+                                        "protein" : [[300+P_ONSET, PROTEIN]] }, T=T)
                                     
     BasicExperiments.add(MULTI_LTP_BEFORE_PRP)
     STC_LTP_SBW = Experiment("STC_LTP_SBW",
                             {"stim": [[900, WTET]], 
                             "LFS": [], 
                             "crosslink": [[900, X_WTET]], 
-                            "protein" : [[0, PROTEIN]]})  
+                            "protein" : [[0, PROTEIN]]},T=T)  
 
     BasicExperiments.add(STC_LTP_SBW)
     STC_LTP_WBS = Experiment("STC_LTP_WBS",
@@ -105,7 +110,7 @@ def create_experiments(model:Model, **kwargs):
                         {"stim": [[300, STET]],
                             "LFS": [[600, LFS]],
                             "crosslink": [[300, X_STET], [600, X_LFS]],
-                            "protein" : [[300+P_ONSET, PROTEIN]] })  
+                            "protein" : [[300+P_ONSET, PROTEIN]] }, T=T)  
 
     BasicExperiments.add(STC_TR5)
     TRBaseExperiments.add(STC_TR5)
@@ -113,14 +118,14 @@ def create_experiments(model:Model, **kwargs):
                         {"stim": [[300, STET]],
                             "LFS": [[1200, LFS]],
                             "crosslink": [[300, X_STET],[1200, X_LFS]],
-                            "protein" : [[300+P_ONSET, PROTEIN]] })  
+                            "protein" : [[300+P_ONSET, PROTEIN]] },T=T)  
 
     BasicExperiments.add(STC_TR15)
     STC_TRLTD = Experiment("STC_TRLTD",
                         {"stim": [[1800, WTET]],
                             "LFS": [[300, LFS]],
                             "crosslink": [[300, X_LFS],[1800, X_WTET]],
-                            "protein" : [[300+P_ONSET, PROTEIN]] }, title = "Tag Resetting LTD")  
+                            "protein" : [[300+P_ONSET, PROTEIN]] }, T=T, title = "Tag Resetting LTD")  
 
     BasicExperiments.add(STC_TRLTD)
     TRBaseExperiments.add(STC_TR15)
@@ -129,7 +134,7 @@ def create_experiments(model:Model, **kwargs):
                             "LFS": [[300, LFS]],
                             "crosslink": [[300, X_LFS]],
                             "protein" : [[300+P_ONSET, PROTEIN]] },
-                            exp_data = data_LTD)  
+                            exp_data = data_LTD, T=T)  
 
     BasicExperiments.add(LTD)
     W_LFS = Experiment("W_LFS",
@@ -151,7 +156,7 @@ def create_experiments(model:Model, **kwargs):
                             {"stim": [],
                             "LFS": [[900, WLFS]],
                             "crosslink": [[900, X_WLFS]],
-                            "protein" : [[0, PROTEIN]] })  
+                            "protein" : [[0, PROTEIN]] }, T=T)  
     BasicExperiments.add(STC_LTD_SBW)
     import numpy as np
     protein_times = [[max(k-PROTEIN,0),k] for k in np.arange(900,7*3600,300)]

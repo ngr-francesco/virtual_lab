@@ -1,2 +1,4 @@
 __pycache__ 
 .VSCodeCounter
+examples/plots
+examples/usr_prefs

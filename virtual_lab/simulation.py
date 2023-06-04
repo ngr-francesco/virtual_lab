@@ -39,7 +39,7 @@ class Simulation:
             self.models = {model.name: model}
         else:
             self.models = {}
-            print("Initializing a simulation without a given model. A model should be added before running any experiment"
+            self.logger.info("Initializing a simulation without a given model. A model should be added before running any experiment"
             " by calling Simulation.add_model()")
         self._ordered_quantities = []
         self.model_results = {}
@@ -258,7 +258,7 @@ class Simulation:
             self.model_results[self.model.name] = results
         end_time = perf_counter()
         duration = end_time-start_time
-        print(f"Simulating {len(experiments)} experiments took: {duration:.3f} s")
+        self.logger.info(f"Simulating {len(experiments)} experiments took: {duration:.3f} s")
         plt.show()
         return results
 
@@ -267,7 +267,7 @@ class Simulation:
         Initialize the system in its stationary state (if there is one). Then perturb one of the variables to 
         measure the relaxation process. Particularly useful for models which cannot be integrated analytically.
         """
-        pass
+        raise NotImplementedError
         
     
     def reduce_data(self,values, start,stop,step=1):
@@ -334,7 +334,7 @@ class Simulation:
                     if exp == result["experiment"].name:
                         counter += 1
         n_plots = len(results) if exp_names is None else counter
-        print(f"Plotting {n_plots} experiments")
+        self.logger.info(f"Plotting {n_plots} experiments")
         use_legend = kwargs.get('legend', True)
         separate_legend = kwargs.get('separate_legend', False)
         plot_cols = kwargs.get("n_cols",min(n_plots,4))
@@ -459,11 +459,11 @@ class Simulation:
                 plt.legend(plot_handles,plot_labels, bbox_to_anchor = (1,0), loc= 'lower left', ncol=kwargs.get('legend_cols', ceil(len(model_variables)/10)))
                 plt.tight_layout()
             else:
-                self.plot_separate_legend(plot_handles,plot_labels,filename= filename)
-                
+                self.plot_separate_legend(plot_handles,plot_labels,filename= filename) 
         makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
         fig.tight_layout()
         fig.savefig(self.prefs.plot_directory + filename)
+        self.logger.debug(f"Saved plot figure in file: {filename}")
         plt.show()
 
 
@@ -512,6 +512,7 @@ class Simulation:
     
     def plot_experiment_quantities(self,exp,min_value,model_name,T,timescale):
         quantities = exp()
+        print("exp_quantities", quantities)
         sorted_quantities = self.sort_by_appearance(quantities.keys())
         # This counter is useful for knowing which of the experiments should determine the legend (the one with the most quantities being plotted)
         # and also to know in which positions to plot the quantities so they don't overlap vertically
@@ -527,8 +528,10 @@ class Simulation:
         dep = list(self.models[model_name].quantity_dependencies().values())
         # Flatten the list of the keys contained in the values of the dictionary returned by quantity_dependencies()
         used_quantities = list(chain(*[list(dep[i].keys()) for i in range(len(dep))]))
+        self.logger.debug(f"Plotting experimental quantities: {used_quantities}\n{sorted_quantities}")
         for q,pos in zip(sorted_quantities,positions):
             col = self.color_coding[q]
+            print("quantities", q)
             if q in used_quantities:
                 plt.plot([0,T],[pos,pos], color = col, ls = ":", alpha = 1)
                 if quantities[q] is not None and len(quantities[q]):
@@ -850,7 +853,7 @@ class Simulation:
                 time_axis = time_axis.pop(0)
             
             n_plots = 1 if not isinstance(points[variables[0]][0],list) else len(results)
-            print(f"Making {n_plots} plots")
+            self.logger.info(f"Making {n_plots} plots")
             # TODO this is not optimal, also, currently not supporting multiple x_data arrays
             if x_data is not None: # Override the time axis, but only if they're compatible
                 if n_plots> 1:
@@ -903,7 +906,7 @@ class Simulation:
                 use_legend = kwargs.get("use_legend", True)
                 separate_legend = kwargs.get('separate_legend', False)
                 figsize = kwargs.get('figsize',self.prefs.determine_figsize(plot_rows,plot_cols,use_legend,separate_legend))
-                print("Figsize",figsize)
+                self.logger.debug("Figsize",figsize)
                 fontsize = kwargs.get('fontsize',12)
                 plt.rcParams['font.size'] = fontsize
                 fig = plt.figure(figsize=figsize)

@@ -1,17 +1,18 @@
 from warnings import warn
+from virtual_lab.settings import prefs
 import numpy as np
 
 class Experiment:
-    def __init__(self,name, exp_const, exp_data = None, **kwargs):
+    def __init__(self,name: str, event_intervals: dict(), exp_data = None, **kwargs):
         self.name = name
         self.title = kwargs.get('title',name)
         self.quantities = {}
         self.experimental_data = exp_data
-        for key,value in exp_const.items():
+        for key,value in event_intervals.items():
             setattr(self,key,[[onset,onset+duration] for onset,duration in value])
             self.quantities[key] = getattr(self,key)
         self.dt = kwargs.get("dt",1)
-        self.T = kwargs.get("T",10)
+        self.T = kwargs.get("T",prefs.exp_T)
     
     steps = property(lambda self: int(self.T/self.dt))
     
@@ -22,15 +23,15 @@ class Experiment:
         return self.name
     
     def copy(self):
-        exp_const = {}
+        event_intervals = {}
         for name, q in self.quantities.items():
             new_q = []
             for ton,toff in q:
                 duration = toff-ton
                 new_q.append([ton,duration])
-            exp_const[name] = new_q
+            event_intervals[name] = new_q
 
-        return Experiment(self.name,exp_const,T = self.T,dt = self.dt, exp_data = self.experimental_data)
+        return Experiment(self.name,event_intervals,T = self.T,dt = self.dt, exp_data = self.experimental_data)
 
     def edit_quantity(self,name,values):
         if name in self.quantities:
@@ -116,7 +117,6 @@ class Experiments:
                     else:
                         exp.add_event(name,[])
                 else:
-                    print(type(intervals[0]))
                     raise NotImplementedError("If an event is concurring with another and you wish to add it, use the format [onset,duration] (no nested lists!)")
 
     

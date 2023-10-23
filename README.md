@@ -2,7 +2,7 @@
 
 # VIRTUAL LAB
 
-Virtual Lab is a simulation manager software which was conceived while working on my Master's thesis and which has the purpose of simplifying the pipeline involved in testing computational models. The main idea behind virtual lab is to organize the workflow into separate steps in order to keep the script as clean as possible:
+Virtual Lab is a simulation manager software which has the purpose of simplifying the pipeline involved in testing scientific computational models. The main idea behind virtual lab is to organize the workflow into separate steps in order to keep the user scripts as clean as possible:
 1. First, defining our `Model`, which can contain any number of time dependent functions, differential equations or any of the currently supported stochastic processes. The default values of the parameters used in the model can be given at initialization and will then be available as class attributes.
 2. Then defining some `Experiment`s, which describe the experimental conditions under which we want to analyse our model during our simulations. Each experiment defines a set of events which will correspond to time dependent modifications to the parameters of our model.
 3. Finally, we initialize our `Simulation`, which can apply the `Experiment`'s conditions to our `Model`, run simulations and analyse the results. Our `Simulation` can contain any number of `Model`s and can readily compare the results obtained on the same `Experiment` from different models.

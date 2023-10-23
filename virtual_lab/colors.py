@@ -1,5 +1,7 @@
 from .logger import get_logger
 from .settings import prefs
+from copy import deepcopy
+from virtual_lab.const import ColorCodingStrategies
 
 # TODO: the current color scheme is not applicable in the case in which you want to compare models
 # on the same plot (they would have the same color coding). 
@@ -14,10 +16,9 @@ class ColorCoding:
     def __init__(self, color_coding: dict = {}, color_presets: dict = prefs.color_presets):
         self.color_coding = color_coding
         self._color_presets = color_presets
-        self.available_colors = {key: [] for key in self.color_presets.keys()}
-        # This simply sets the available colors to the presets to be ready for a new simulation
-        self.refresh_available_colors()
-        self.strategy = "cycle"
+        self.available_colors = {key: [] for key in self.color_presets.keys()} 
+        # Set the default strategy for running out of colors       
+        self.cycle()
         self.cycling_index = 0
         self.logger = get_logger("ColorCoding")
         self.logger.debug(f"Initialized color coding with {color_coding}")
@@ -29,18 +30,21 @@ class ColorCoding:
         Set the strategy used when running out of available colors to "cycle".
         This strategy will cycle through the preset colors when running out of available colors.
         """
-        self.strategy = "cycle"
+        self.strategy = ColorCodingStrategies.CYCLE
+        self.refresh_available_colors()
     
     def monocrome(self):
         """
         Set the strategy used when running out of available colors to "monocrome".
         This strategy will use the same color for all variables when running out of available colors.
         """
-        self.strategy = "monocrome"
+        self.strategy = ColorCodingStrategies.MONOCROME
+        self.refresh_available_colors()
+
 
     def __repr__(self):
         """
-        Prints the color coding in a table.
+        Shows the color coding in a table.
         """
         return self.get_table()
 
@@ -71,6 +75,8 @@ class ColorCoding:
         """
         # Check if the variable is already in the color coding
         if key in self.color_coding:
+            if color == self.color_coding[key]:
+                return False
             self.logger.warning(f"Overwriting color for {key}.")
             # If we're changing the color of this var, we add its previous color to the available colors
             self.available_colors[category].append(self.color_coding[key])
@@ -81,6 +87,7 @@ class ColorCoding:
             self.check_if_run_out_of_colors()
 
         self.color_coding[key] = color
+        return True
     
     def check_if_run_out_of_colors(self):
         """
@@ -99,25 +106,30 @@ class ColorCoding:
         if var_type is None:
             var_type = "var"
         for key in keys:
-            if key not in self.color_coding:
-                self.color_coding[key] = self.available_colors[var_type].pop(0)
+            changed_color = self._set_color(key, self.available_colors[var_type][0], var_type)
+            if changed_color:
                 changed_color_coding.append(key)
-            self.check_if_run_out_of_colors()
+        
         
         if len(changed_color_coding):
-            color_coding_to_print = '\n'.join(self.color_coding)
-            msg = f"""Updated color coding to account for {var_type}s: {changed_color_coding}:\n{color_coding_to_print}"""          
+            color_coding = '\n'.join(self.color_coding)
+            msg = f"""Updated color coding to account for {var_type}s: {changed_color_coding}:\n{color_coding}"""          
             self.logger.diagnostic(msg)
     
     def refresh_available_colors(self):
         """
         If we run out of colors, we try to refresh the available colors by checking if any colors from the presets are not being used.
         This can happen if the user has changed the color coding manually.
+        If we're using the monocrome strategy we simply set the color to black for all variable types.
         """
-        for var_type, colors in self.color_presets.items():
-            for color in colors:
-                if color not in self.color_coding.values():
-                    self.available_colors[var_type].append(color)
+        if self.strategy == ColorCodingStrategies.CYCLE:
+            for var_type, colors in self.color_presets.items():
+                for color in colors:
+                    if color not in self.color_coding.values():
+                        self.available_colors[var_type].append(color)
+        elif self.strategy == ColorCodingStrategies.MONOCROME:
+            for var_type in self.available_colors:
+                self.available_colors[var_type] = ["#000000"]
     
     def manage_empty_available_colors(self, var_type: str = None):
         """
@@ -134,10 +146,10 @@ class ColorCoding:
         else:
             self.refresh_available_colors()
             if len(self.available_colors[var_type]) == 0:
-                if self.strategy == "cycle":
-                    self.available_colors[var_type] = self.color_presets[var_type]
+                if self.strategy == ColorCodingStrategies.CYCLE:
+                    self.available_colors[var_type] = deepcopy(self.color_presets[var_type])
                     self.logger.warning(f"Ran out of colors for {var_type}. Cycling through the available colors.")
-                elif self.strategy == "monocrome":
+                elif self.strategy == ColorCodingStrategies.MONOCROME:
                     self.available_colors[var_type] = ["black"]
                     self.logger.warning(f"Ran out of colors for {var_type}. Using monocrome.")
                 else:

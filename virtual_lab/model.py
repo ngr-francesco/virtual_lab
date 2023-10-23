@@ -13,10 +13,13 @@ class Variables:
             setattr(self,key,value)
         self.init_values = variables.copy()
         self.varnames = [var for var in variables]
+
+        # Recording related attributes (all updated through 'update_recorded_variables')
         self._to_record = {name: record for name in self.varnames}
         self.recorded_variables = [name for name in self.varnames if record]
         self._is_recording = record
-        # For now we either record all or none
+
+        # For now, at initialization we either record all or none
         if self.is_recording:
             self.recorded_values = {name : [] for name in self.varnames}
     
@@ -27,6 +30,16 @@ class Variables:
     
     def __len__(self):
         return len(self.varnames)
+    
+    def _add_variable(self, varname : str, init_value = None, record = True):
+        """
+        Should never be called directly, should be called by the Model.add_variable method.
+        """
+        self.varnames.append(varname)
+        self.update_recorded_variables({varname: record})
+        # Set the variable to its initial value
+        setattr(self,varname,init_value)
+        self.init_values.update({varname: init_value})
 
     @property
     def is_recording(self):
@@ -62,7 +75,7 @@ class Variables:
                 self.is_recording = True
             elif values == 'none' or values == 'None':
                 self.recorded_variables = []
-                self.is_recording = True
+                self.is_recording = False
         elif isinstance(values,dict):
             to_pop = []
             for name in values:
@@ -74,6 +87,7 @@ class Variables:
             self._to_record.update(values)
             self.recorded_variables = [name for name in self.varnames if self._to_record[name] == True]
             self.is_recording = True if len(self.recorded_variables) else False
+
         # Here we assume the user gave a list of variables to record
         elif isinstance(values,list):
             for name in values:
@@ -97,12 +111,37 @@ class Model:
         for key,value in const.items():
             setattr(self,key,value)
         # Make a dict containing all the equations of the model (must match the names of the variables!)
-        self.model_equations = self.equations_dict()
-        self.diff_equations = self.diff_equations_dict()
+        try:
+            self.model_equations = self.equations_dict(self.variables)
+            self.diff_equations = self.diff_equations_dict(self.variables)
+        except NotImplementedError:
+            warn("No model equations were defined for this Model. In order to run a simulation you will need to\
+                 define which dynamical equations you wish to use for your model. You can do this\
+                 at a later stage by calling model.set_model_equations(eq_dict) or model.set_diff_equations(diff_eq_dict).")
+            
         self.stochastic_variables = self.stochastic_variables_dict()
         self.labels = labels if labels is not None else {}
     
     # Some proxy methods (not sure if this is legit but I guess it's okay)
+    def set_model_equations(self,eq_dict):
+        for var in eq_dict:
+            if not var in self.variables:
+                raise ValueError(f"The given equation for variable {var} is invalid. {var} is not part of this model. Please add this variable to the model\
+                                  before defining its equation")
+        self.model_equations = eq_dict
+
+    def set_diff_equations(self,diff_eq_dict):
+        self.diff_equations = diff_eq_dict
+    
+    def add_variable(self, varname, value, record = True):
+        """
+        Proxy method to add a variable to the model variables
+        """
+        if varname in self.const:
+            raise NameError(f"Naming conflict: the variable name {varname} is already being used for one of the simulation constants.\
+                             Please change either the variable name of the constant name.")
+        if not varname in self.variables.varnames:
+            self.variables._add_variable(varname, value, record = record)
     @property
     def is_recording(self):
         return self.variables.is_recording
@@ -237,7 +276,8 @@ class Model:
     def update_constants(self, const):
         for key,value in const.items():
             setattr(self,key,value)
-    
+
+
     def equations_dict(self,variables):
         raise NotImplementedError
     

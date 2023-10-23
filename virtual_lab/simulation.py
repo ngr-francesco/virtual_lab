@@ -10,15 +10,17 @@ from time import perf_counter
 import json
 
 from virtual_lab.experiments import Experiments, Experiment
+from virtual_lab.messages import MessageHandler
 from virtual_lab.settings import prefs
 from virtual_lab.model import Model
-from virtual_lab.utils import select_unique_handles_and_labels, get_time_unit_in_seconds
-from virtual_lab.logger import get_logger, LogLevel
+from virtual_lab.math import select_unique_handles_and_labels, get_time_unit_in_seconds
+from virtual_lab.logger import get_logger
 from virtual_lab.colors import ColorCoding
+from virtual_lab.const import simulation_message_handling, LogLevel
     
 class Simulation:
-    
-    def __init__(self, model = None, **kwargs):
+    instances_n = 0
+    def __init__(self, model : Model = None, **kwargs):
         """
         Simulation class to handle simulation protocols.
         Parameters:
@@ -27,16 +29,19 @@ class Simulation:
                 The constants used during the experiments. Defaults to the 
                 constants that were defined in the model
         """
+        # Keep track of new instances
+        Simulation.instances_n += 1  
+        self.name = kwargs.get('name','simulation_'+str(Simulation.instances_n))
 
         # Set up the management objects
         self.prefs = kwargs.get("settings",prefs)
-        self.logger = get_logger("Simulation")
+        self.logger = get_logger(self.name)
         self.color_coding = ColorCoding()
+        self.msg_handler = MessageHandler(self, simulation_message_handling)
 
         # Set up the simulation-related attributes
         if model is not None:
-            self.model = model
-            self.models = {model.name: model}
+            self.add_model(model)
         else:
             self.models = {}
             self.logger.info("Initializing a simulation without a given model. A model should be added before running any experiment"
@@ -45,7 +50,7 @@ class Simulation:
         self.model_results = {}
         load_prefs = kwargs.get("load_preferences",True)
         if load_prefs:
-            self.load_user_prefs()    
+            self.load_user_prefs() 
     
     def save_user_prefs(self):
         makedirs(self.prefs.user_prefs_directory[:-1],exist_ok=True)
@@ -87,6 +92,7 @@ class Simulation:
             if switching:
                 self.logger.info(f"Switching to model {model.name}")
                 self.model = model
+            model.add_message_dispatcher(self)
             # Add a color coding for this model's variables
             self._add_colors(model.variables.varnames)
         else:
@@ -97,7 +103,7 @@ class Simulation:
         Add colors to the color coding for the given variables.
         Parameters:
         -----------
-            varnames: list
+            varnames: list or str
                 The variables for which to add colors
             event: bool, optional   
                 If True, the colors will be added to the event colors.
@@ -106,6 +112,9 @@ class Simulation:
                 If True, the colors will be added to the additional colors.
                 If False, the colors will be added to the default colors.  
         """
+        # Probably best to not be too strict with using lists as inputs
+        if isinstance(varnames, str):
+            varnames = [varnames]
         self.color_coding.add_default_colors(varnames, var_type=var_type) 
         self.save_user_prefs()
     

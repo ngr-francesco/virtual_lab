@@ -7,6 +7,10 @@ class LogLevel(enum.IntEnum):
     WARNING = 3
     ERROR = 4
     CRITICAL = 5 
+
+class MsgTypes(enum.IntEnum):
+    MODEL_ADD_VAR = 0
+
 class ColorCodingStrategies(enum.IntEnum):
     CYCLE = 1
     MONOCROME = 2

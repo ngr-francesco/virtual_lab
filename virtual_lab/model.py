@@ -1,6 +1,8 @@
 from distutils.log import warn
 import numpy as np
 from virtual_lab.experiments import Experiment
+from virtual_lab.const import MsgTypes
+from virtual_lab.messages import MessageDispatcher
 # TODO: Maybe it's possible to avoid having to write every time self.variables.variable and you could
 # set a proxy reference to that variable where you could just say self.variable
 class Variables:
@@ -121,6 +123,10 @@ class Model:
             
         self.stochastic_variables = self.stochastic_variables_dict()
         self.labels = labels if labels is not None else {}
+        self.message_dispatchers = []
+    
+    def add_message_dispatcher(self, receiver):
+        self.message_dispatchers.append(MessageDispatcher(receiver))
     
     # Some proxy methods (not sure if this is legit but I guess it's okay)
     def set_model_equations(self,eq_dict):
@@ -142,6 +148,9 @@ class Model:
                              Please change either the variable name of the constant name.")
         if not varname in self.variables.varnames:
             self.variables._add_variable(varname, value, record = record)
+            for msg_disp in self.message_dispatchers:
+                msg_disp.dispatch_message(MsgTypes.MODEL_ADD_VAR, varnames = varname)
+
     @property
     def is_recording(self):
         return self.variables.is_recording

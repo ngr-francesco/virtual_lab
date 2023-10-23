@@ -1,12 +1,4 @@
-import enum
-
-class LogLevel(enum.IntEnum):
-    DIAGNOSTIC = 0
-    DEBUG = 1
-    INFO = 2
-    WARNING = 3
-    ERROR = 4
-    CRITICAL = 5 
+from virtual_lab.const import LogLevel
 
 
 class VL_Logger:

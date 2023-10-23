@@ -1,5 +1,5 @@
 from virtual_lab.model import Model
-from virtual_lab.utils import bd_process
+from virtual_lab.math import bd_process
 import numpy as np
 
 class BaseModel(Model):

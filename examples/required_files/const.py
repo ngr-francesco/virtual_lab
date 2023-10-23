@@ -92,7 +92,7 @@ EXPERIMENTAL_DATA = {
     "time_unit" : "min"
  }
 
-from virtual_lab.utils import preprocess_experimental_data
+from virtual_lab.math import preprocess_experimental_data
 preprocess_experimental_data(EXPERIMENTAL_DATA)
 
 

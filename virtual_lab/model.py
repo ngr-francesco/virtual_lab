@@ -114,8 +114,8 @@ class Model:
             setattr(self,key,value)
         # Make a dict containing all the equations of the model (must match the names of the variables!)
         try:
-            self.model_equations = self.equations_dict(self.variables)
-            self.diff_equations = self.diff_equations_dict(self.variables)
+            self.model_equations = self.equations_dict()
+            self.diff_equations = self.diff_equations_dict()
         except NotImplementedError:
             warn("No model equations were defined for this Model. In order to run a simulation you will need to\
                  define which dynamical equations you wish to use for your model. You can do this\
@@ -208,7 +208,7 @@ class Model:
         self.variables.init_values = new_init_values
     
     def set_initial_values(self,stochastic):
-        warn("Currently the method 'set_initial_values' is not implemented, this implies"
+        warn(f"The method 'set_initial_values' is not implemented in model {type(self)}: {self.name}, this implies"
              " that all the variable and constant initial values were given through the const argument at "
              "initialization of the Model class.")
     
@@ -287,10 +287,10 @@ class Model:
             setattr(self,key,value)
 
 
-    def equations_dict(self,variables):
+    def equations_dict(self):
         raise NotImplementedError
     
-    def diff_equations_dict(self,variables):
+    def diff_equations_dict(self):
         raise NotImplementedError
 
 

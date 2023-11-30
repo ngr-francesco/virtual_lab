@@ -3,7 +3,7 @@ from virtual_lab.settings import prefs
 import numpy as np
 
 class Experiment:
-    def __init__(self,name: str, event_intervals: dict(), exp_data = None, **kwargs):
+    def __init__(self,name: str, event_intervals: dict() = {}, exp_data = None, **kwargs):
         self.name = name
         self.title = kwargs.get('title',name)
         self.quantities = {}

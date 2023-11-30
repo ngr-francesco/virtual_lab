@@ -38,19 +38,21 @@ class Simulation:
         self.logger = get_logger(self.name)
         self.color_coding = ColorCoding()
         self.msg_handler = MessageHandler(self, simulation_message_handling)
+        self.models = {}
+        self.model_results = {}
+        load_prefs = kwargs.get("load_preferences",True)
+        self._ordered_quantities = []
 
         # Set up the simulation-related attributes
         if model is not None:
             self.add_model(model)
         else:
-            self.models = {}
             self.logger.info("Initializing a simulation without a given model. A model should be added before running any experiment"
             " by calling Simulation.add_model()")
-        self._ordered_quantities = []
-        self.model_results = {}
-        load_prefs = kwargs.get("load_preferences",True)
+        
         if load_prefs:
             self.load_user_prefs() 
+        
     
     def save_user_prefs(self):
         makedirs(self.prefs.user_prefs_directory[:-1],exist_ok=True)
@@ -521,7 +523,6 @@ class Simulation:
     
     def plot_experiment_quantities(self,exp,min_value,model_name,T,timescale):
         quantities = exp()
-        print("exp_quantities", quantities)
         sorted_quantities = self.sort_by_appearance(quantities.keys())
         # This counter is useful for knowing which of the experiments should determine the legend (the one with the most quantities being plotted)
         # and also to know in which positions to plot the quantities so they don't overlap vertically
@@ -540,7 +541,6 @@ class Simulation:
         self.logger.debug(f"Plotting experimental quantities: {used_quantities}\n{sorted_quantities}")
         for q,pos in zip(sorted_quantities,positions):
             col = self.color_coding[q]
-            print("quantities", q)
             if q in used_quantities:
                 plt.plot([0,T],[pos,pos], color = col, ls = ":", alpha = 1)
                 if quantities[q] is not None and len(quantities[q]):

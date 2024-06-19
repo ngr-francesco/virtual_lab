@@ -54,6 +54,10 @@ class BaseModel(Model):
                 raise AttributeError(f"The following quantity is not defined in the model, but it is needed by the experimental procedure {q}\n"
                 "Make sure you define all the needed constants before running a simulation")
         dependencies = {
+            # These link the values that each parameter takes when an event occurs
+            # to the parameter name. Outside of these events, when the parameter is in its standard state, 
+            # the Simulation looks for a param_0 value in the constants used to define the model (for example k_u_0 is defined in required_files/const.py).
+            # Essentially: when the crosslink event happens, then k_u is changed from k_u_0 to k_u_1, and so on...
             "k_u": {"crosslink": self.k_u_1},
             "k_b": {"crosslink": self.k_b_1},
             "protein": {"protein": 1},
@@ -69,6 +73,7 @@ class BaseModel(Model):
         return dependencies
     
     def stochastic_variables_dict(self):
+        # Since we are only really using the deterministic model, this is not needed.
         stochastic_variables = {
             "nf" : (bd_process,["gamma","mu"])
         }
@@ -109,6 +114,8 @@ class BaseModel(Model):
         return self.variables.Vd + self.variables.Vs
 
 class MomentumModel(BaseModel):
+    """The more convoluted version of the model.
+    """
     def latex_equations(self):
         eq = [r'$\frac{dV_d}{dt} = \mathrm{b}n_f(t) + \left(\frac{V_{e}-V_s-V_d}{\tau_V}\right)\frac{V_d}{V_{d,eq}} + k_uV_s - k_bV_d$',
               r'$\frac{dV_s}{dt} = k_bV_d - k_uV_s$',

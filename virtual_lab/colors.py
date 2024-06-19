@@ -2,6 +2,7 @@ from .logger import get_logger
 from .settings import prefs
 from copy import deepcopy
 from virtual_lab.const import ColorCodingStrategies
+import json
 
 # TODO: the current color scheme is not applicable in the case in which you want to compare models
 # on the same plot (they would have the same color coding). 
@@ -100,22 +101,16 @@ class ColorCoding:
     
     def add_default_colors(self, keys, var_type = None):
         """
-        Add default colors to the color coding.
+        Add default colors to the color coding. Default colors are applied only to variables that weren't already being tracked.
         """
         changed_color_coding = []
         if var_type is None:
             var_type = "var"
         for key in keys:
-            changed_color = self._set_color(key, self.available_colors[var_type][0], var_type)
-            if changed_color:
-                changed_color_coding.append(key)
+            if not key in self.color_coding:
+                self._set_color(key, self.available_colors[var_type][0], var_type)
+
         
-        
-        if len(changed_color_coding):
-            color_coding = '\n'.join(self.color_coding)
-            msg = f"""Updated color coding to account for {var_type}s: {changed_color_coding}:\n{color_coding}"""          
-            self.logger.diagnostic(msg)
-    
     def refresh_available_colors(self):
         """
         If we run out of colors, we try to refresh the available colors by checking if any colors from the presets are not being used.

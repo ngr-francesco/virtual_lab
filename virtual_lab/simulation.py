@@ -8,6 +8,7 @@ from copy import deepcopy
 from itertools import chain
 from time import perf_counter
 import json
+from math import floor
 
 from virtual_lab.experiments import Experiments, Experiment
 from virtual_lab.messages import MessageHandler
@@ -420,7 +421,6 @@ class Simulation:
                     plt.title(model_name + ": " + result["name"])
                 # FIXME: This is not generally useful, remove!
                 plt.plot([start,stop/timescale],[1,1] ,color='0', ls=":")
-
                 for name in model_variables:
                     if name in values.keys():
                         ls = '-'
@@ -542,13 +542,19 @@ class Simulation:
         for q,pos in zip(sorted_quantities,positions):
             col = self.color_coding[q]
             if q in used_quantities:
+                plotted_any = False
                 plt.plot([0,T],[pos,pos], color = col, ls = ":", alpha = 1)
                 if quantities[q] is not None and len(quantities[q]):
                     for ton,toff in quantities[q]:
                         toff = min(toff,T*timescale)
+                        # If the plot ends before the quantity begins, don't plot it.
+                        if toff < ton:
+                            continue
                         plt.plot([ton/timescale,toff/timescale], [pos,pos], color = col,lw = 6)
-                    q_label = self.determine_label(q)
-                    plt.plot([ton/timescale,toff/timescale], [pos,pos],label = q_label,color = col, lw = 6)
+                        plotted_any = True
+                    if plotted_any:
+                        q_label = self.determine_label(q)
+                        plt.plot([ton/timescale,toff/timescale], [pos,pos],label = q_label,color = col, lw = 6)
     
     def sort_by_appearance(self,names):
         """
@@ -563,10 +569,11 @@ class Simulation:
     def _get_time_quantities(self, exp, time_interval = None, step = 1,time_unit = "min",**kwargs):
         start = time_interval[0] if time_interval is not None else 0
         dt = step*exp.dt
-        stop = time_interval[1] if time_interval is not None else int(exp.T) 
+        stop_t = floor(time_interval[1]) if time_interval is not None else int(exp.T) 
         timescale = get_time_unit_in_seconds(time_unit)
-        time_axis = np.arange(start,stop,dt)/timescale
-        return time_axis,timescale,start,stop,dt
+        time_axis = np.arange(start,stop_t,dt)/timescale
+        stop_var = floor(stop_t/exp.dt)
+        return time_axis,timescale,start,stop_var,step
     
     def get_min_value(self,values,variables = None,skip_means = True):
         if variables is None:

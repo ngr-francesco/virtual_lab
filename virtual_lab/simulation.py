@@ -402,7 +402,7 @@ class Simulation:
                 exp = result["experiment"]
                 idx = exp_names.index(result["name"])
                 interval = time_interval[idx] if time_interval is not None else None
-                time_axis,timescale,start,stop,_ = self._get_time_quantities(exp,interval,step,time_unit)
+                time_axis,timescale,start,stop,step = self._get_time_quantities(exp,interval,step,time_unit)
                 values = self.reduce_data(result,start,stop,step)
                 if variables is None:
                     model_variables = self.models[model_name].variables
@@ -745,12 +745,20 @@ class Simulation:
             for model in models:
                 results[model] = [self.model_results[model][i].copy() for i in range(len(self.model_results[model]))]
         elif results is not None and isinstance(results,list):
+            tmp = results
             results = {}
-            for result in results:
-                results[result["model"]] = result
+            for result in tmp:
+                try:
+                    results[result['model']]
+                except:
+                    results[result['model']] = []
+                results[result["model"]].append(result)
+        else:
+            print(results)
         result_list = self.sort_results_by_exp(results, exp_names = exp_names)
+        n_cols = kwargs.pop('n_cols', len(results.keys()))
         # Giving exp_names at this point is useless, but I guess it doesn't hurt
-        self.plot_results(result_list,exp_names,n_cols = len(results.keys()), **kwargs)
+        self.plot_results(result_list,exp_names,n_cols =n_cols, **kwargs)
     
     def sort_results_by_exp(self,res_dict, exp_names = None):
         # Not sure if this is necessary but I guess it's a good precaution
@@ -778,9 +786,11 @@ class Simulation:
                         reference_values = None, reference_data = None, multi_plot = 1,
                         save = True, filename = "img.pdf", **kwargs):
         # TODO: add possibility to plot from multiple results (i.e. a list or dictionary of results like above)
-        # TODO: general thing, implement a figure class which makes it easier to manipulate images without the need to:
-        # 1. Always call these plotting functions with 100 arguments
-        # 2. Always re-plot everything and keep adding functionalities which would be shared among all plots you can do with this package.
+        # TODO: general thing, implement a figure class which makes it easier to manipulate images 
+        #       without the need to:
+        #           1. Always call these plotting functions with 100 arguments
+        #           2. Always re-plot everything and keep adding functionalities which would be 
+        #              shared among all plots you can do with this package.
         
         if not isinstance(results,list):
             if isinstance(results,dict):
@@ -790,12 +800,12 @@ class Simulation:
         if multi_plot != 1: 
             assert len(results) == multi_plot
             if reference_data is not None:
-                assert len(reference_data) == multi_plot
+                assert len(reference_data) == multi_plot, "Reference data does not cover all the plots requested."
                 multi_data = reference_data
             else:
                 multi_data = [None for k in range(multi_plot)]
             if reference_values is not None:
-                assert len(reference_values) == multi_plot
+                assert len(reference_values) == multi_plot, "Reference values do not cover all the plots requested."
                 multi_values = reference_values
             else:
                 multi_values = [None for k in range(multi_plot)]
@@ -913,15 +923,17 @@ class Simulation:
                 plot_cols = kwargs.get('n_cols',min(n_plots,4))*multi_plot
                 plot_rows = ceil(n_plots/plot_cols)
                 use_legend = kwargs.get("use_legend", True)
+                title = kwargs.get("title", None)
                 separate_legend = kwargs.get('separate_legend', False)
                 figsize = kwargs.get('figsize',self.prefs.determine_figsize(plot_rows,plot_cols,use_legend,separate_legend))
-                self.logger.debug("Figsize",figsize)
+                self.logger.debug(f"Figsize {figsize}")
                 fontsize = kwargs.get('fontsize',12)
                 plt.rcParams['font.size'] = fontsize
                 fig = plt.figure(figsize=figsize)
                 ax0 = fig.add_subplot(1,multi_plot,1)
                 if multi_plot == 1:
-                    ax0.set_axis_off()
+                    #ax0.set_axis_off()
+                    pass
             else:
                 ax = fig.add_subplot(1, multi_plot, multi_plot_idx+1,sharey = ax0)
             axes = []
@@ -957,7 +969,11 @@ class Simulation:
                         plt.plot([time_axis[0],time_axis[-1]],[val,val],label = l,ls = "--",lw = 3)
                 plt.xlabel(kwargs.get("xlabel","iterations"))
                 plt.ylabel(kwargs.get('ylabel','ratio of baseline'))
-                plt.title(titles[idx])
+                if title:
+                    title_i = title
+                else:
+                    title_i = titles[idx]
+                plt.title(title_i)
                 # yticks = plt.yticks()[0]
                 #TODO delete!
                 # if multi_plot_idx != 1:
@@ -978,6 +994,8 @@ class Simulation:
         makedirs(self.prefs.plot_directory[:-1],exist_ok=True)
         fig.savefig(self.prefs.plot_directory + filename)
         plt.show()
+        if kwargs.get('return_data') is True:
+            return points
     
     def determine_label(self,varname):
         if not hasattr(self.model,"labels") or not varname in self.model.labels:

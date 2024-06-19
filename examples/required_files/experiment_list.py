@@ -4,24 +4,24 @@ from virtual_lab.experiments import *
 from examples.required_files.const import *
 from virtual_lab.settings import prefs
 with open("experimental_data.json","r") as file:
-    exp_data = json.load(file)
+    STC_data = json.load(file)
 
 # TODO: this looks terrible, I have to implement a better experimental data management system
 data_LTP = {}
-names = [name for name in exp_data if "Matsuzaki" in name]
+names = [name for name in STC_data if "Matsuzaki" in name]
 names.append("renorm_var")
 names.append("time_unit")
 for name in names:
-    data_LTP[name] = exp_data[name]
+    data_LTP[name] = STC_data[name]
 data_LTD = {}   
-names = [name for name in exp_data if "Kasai" in name]
+names = [name for name in STC_data if "Kasai" in name]
 names.append("renorm_var")
 names.append("time_unit")
 T = 2*3600
 
 
 for name in names:
-    data_LTD[name] = exp_data[name]
+    data_LTD[name] = STC_data[name]
 from virtual_lab.model import Model
 def create_experiments(model:Model, **kwargs):
     # Set the global time duration for the experiments

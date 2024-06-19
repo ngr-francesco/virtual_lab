@@ -40,6 +40,7 @@ class BaseModel(Model):
             # This is a bit of a cheat, but I'll check if without this it still works.
             # TODO: check!
             self.nf_0 = np.mean(self.nf)
+        self.variables.Vpsd = 1
         self.variables.V_eff = self.nu*self.nf_0*self.tau_Vd + self.variables.Vpsd 
         self.variables.Vd =  self.eql    * self.variables.V_eff
         self.variables.Vs = (1-self.eql) * self.variables.V_eff

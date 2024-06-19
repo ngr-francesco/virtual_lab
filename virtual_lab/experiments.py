@@ -69,11 +69,19 @@ class Experiments:
                 self.experiments.append(experiment)
                 self._exp_names.append(experiment.name)
             else:
-                if not idx in range(len(self.experiments)):
+                if not idx in range(-len(self.experiments),len(self.experiments)):
                     warn(f"Index {idx} is not valid for this class containing"
-                    " {len(self.experiments)} experiments. Will simply append at the end") 
-                self.experiments.insert(idx,experiment)
-                self._exp_names.append(experiment.name)
+                    " {len(self.experiments)} experiments. Will simply append at the end")
+                if idx == -1:
+                    self.experiments.append(experiment)
+                    self._exp_names.append(experiment.name)
+                if idx < -1:
+                    self.experiments.insert(idx+1, experiment)
+                    self._exp_names.insert(idx+1,experiment.name)
+                else:
+                    self.experiments.insert(idx,experiment)
+                    self._exp_names.insert(idx,experiment.name)
+                
 
     def __iter__(self):
         return iter(self.experiments)

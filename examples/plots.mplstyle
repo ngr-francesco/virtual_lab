@@ -1,0 +1,21 @@
+axes.labelsize: large
+axes.linewidth: 1.5
+axes.labelpad: 2.0
+axes.spines.right: False
+axes.spines.top: False
+
+xtick.major.size: 5
+xtick.major.width: 1.5
+xtick.labelsize: large
+xtick.direction: out
+
+ytick.major.size: 5
+ytick.major.width: 1.5
+ytick.labelsize: large
+ytick.direction: out
+
+legend.frameon: False
+legend.fontsize: large
+
+figure.frameon: False
+
